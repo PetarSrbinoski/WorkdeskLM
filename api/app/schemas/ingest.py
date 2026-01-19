@@ -7,4 +7,5 @@ class IngestResponse(BaseModel):
     size_bytes: int
     sha256: str
     page_count: int
+    chunk_count: int
     deduped: bool

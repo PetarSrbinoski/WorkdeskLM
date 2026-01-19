@@ -6,7 +6,7 @@ API_BASE = os.getenv("API_BASE_URL", "http://api:8000").rstrip("/")
 
 st.set_page_config(page_title="NotebookLM-Clone (Gen 1)", layout="wide")
 st.title("📚 NotebookLM-Clone (Gen 1)")
-st.caption("Step 2: Ingest (PDF/TXT/MD) → parse pages → store locally (SQLite)")
+st.caption("Step 3: Chunking (overlap) → store chunks locally (SQLite)")
 
 left, right = st.columns([1, 2], gap="large")
 
@@ -34,14 +34,14 @@ with left:
     st.write("API Base:", API_BASE)
 
     st.divider()
-    st.subheader("Upload document (Step 2)")
+    st.subheader("Upload document (Ingest + Chunk)")
 
     uploaded = st.file_uploader("PDF / TXT / MD", type=["pdf", "txt", "md"])
     if uploaded is not None:
         if st.button("⬆️ Ingest"):
             files = {"file": (uploaded.name, uploaded.getvalue(), uploaded.type or "application/octet-stream")}
             try:
-                with httpx.Client(timeout=60.0) as c:
+                with httpx.Client(timeout=120.0) as c:
                     r = c.post(f"{API_BASE}/ingest", files=files)
                 if r.status_code >= 400:
                     st.error(f"Ingest failed (HTTP {r.status_code})")
@@ -71,11 +71,48 @@ with right:
         st.error(str(e))
 
     if docs_payload:
-        st.write(f"Count: {docs_payload['count']}")
         documents = docs_payload.get("documents", [])
-
-        # Show JSON for transparency (nice for debugging)
+        st.write(f"Count: {docs_payload['count']}")
         st.json(docs_payload)
+
+        st.divider()
+        st.subheader("Inspect chunks (debug)")
+
+        if documents:
+            label_to_id = {
+                f"{d['name']} | pages={d['page_count']} | chunks={d['chunk_count']} | {d['id'][:8]}…": d["id"]
+                for d in documents
+            }
+            selected_label = st.selectbox("Select doc", list(label_to_id.keys()), key="chunks_doc")
+            doc_id = label_to_id[selected_label]
+
+            limit = st.slider("Limit", 5, 200, 20)
+            page_filter = st.number_input("Page filter (0 = all)", min_value=0, value=0, step=1)
+
+            params = {"limit": limit}
+            if page_filter and page_filter > 0:
+                params["page"] = int(page_filter)
+
+            try:
+                with httpx.Client(timeout=10.0) as c:
+                    cr = c.get(f"{API_BASE}/documents/{doc_id}/chunks", params=params)
+                if cr.status_code == 200:
+                    chunks_payload = cr.json()
+                    st.write(f"Returned chunks: {chunks_payload['count']}")
+                    # Show just a readable table-ish view
+                    for ch in chunks_payload["chunks"]:
+                        st.markdown(
+                            f"**Page {ch['page_number']} | Chunk {ch['chunk_index']} | "
+                            f"{ch['start_char']}-{ch['end_char']}**"
+                        )
+                        st.code(ch["text"][:1200])
+                else:
+                    st.error(f"Chunk list failed (HTTP {cr.status_code})")
+                    st.code(cr.text)
+            except Exception as e:
+                st.error(str(e))
+        else:
+            st.info("No documents yet.")
 
         st.divider()
         st.subheader("Delete a document")
@@ -83,12 +120,11 @@ with right:
         if not documents:
             st.info("No documents to delete.")
         else:
-            # Build dropdown label -> doc_id map
             options = {
-                f"{d['name']}  | pages={d['page_count']} | {d['id'][:8]}…": d["id"]
+                f"{d['name']}  | pages={d['page_count']} | chunks={d['chunk_count']} | {d['id'][:8]}…": d["id"]
                 for d in documents
             }
-            selected_label = st.selectbox("Select document", list(options.keys()))
+            selected_label = st.selectbox("Select document", list(options.keys()), key="delete_doc")
             selected_id = options[selected_label]
 
             confirm = st.checkbox("I understand this will permanently delete the document (SQLite).")
@@ -98,8 +134,6 @@ with right:
                         dr = c.delete(f"{API_BASE}/documents/{selected_id}")
                     if dr.status_code == 200:
                         st.success("Deleted ✅")
-                        # refresh view
-                        st.session_state.pop("health", None)
                         st.rerun()
                     else:
                         st.error(f"Delete failed (HTTP {dr.status_code})")
@@ -107,12 +141,10 @@ with right:
                 except Exception as e:
                     st.error(str(e))
 
-
 st.divider()
 st.subheader("Next up")
 st.write(
-    "- Step 3: Chunking with overlap + chunk metadata\n"
-    "- Step 4: Embeddings + Qdrant upsert\n"
-    "- Step 5: Retrieval endpoint (/retrieve)\n"
-    "- Step 6: Chat endpoint (/chat) with strict citations + abstention\n"
+    "- Step 4: Embeddings + Qdrant upsert for chunks\n"
+    "- Step 5: /retrieve endpoint using Qdrant\n"
+    "- Step 6: /chat using Ollama with strict citations + abstention gate\n"
 )
