@@ -11,7 +11,8 @@ class Settings(BaseSettings):
     ollama_base_url: str = "http://host.docker.internal:11434"
 
     fast_model: str = "phi3:mini"
-    quality_model: str = "deepseek-r1-distill-qwen:7b"
+    quality_model: str = "qwen2.5:7b-instruct"
 
+    sqlite_path: str = "/app/data/app.db"
 
 settings = Settings()

@@ -17,6 +17,8 @@ services:
       - .env
     ports:
       - "${API_PORT:-8000}:8000"
+    volumes:
+      - api_data:/app/data
     depends_on:
       - qdrant
     restart: unless-stopped
@@ -35,3 +37,4 @@ services:
 
 volumes:
   qdrant_data:
+  api_data:
