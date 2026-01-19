@@ -1,5 +1,7 @@
 import asyncio
 import logging
+import time
+
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional, Tuple
 from uuid import uuid4
@@ -18,6 +20,12 @@ from app.ingestion.parser import parse_file, sha256_bytes
 from app.schemas.ingest import IngestResponse
 from app.schemas.retrieve import RetrieveRequest, RetrieveResponse, RetrievedChunk
 from app.core.qdrant import search as qdrant_search
+from app.schemas.chat import ChatRequest, ChatResponse, Citation, LatencyBreakdown
+from app.core.ollama import generate as ollama_generate, pick_model
+from app.rag.prompt import ContextChunk, build_prompt
+from app.rag.guardrails import should_abstain_from_retrieval, validate_or_abstain
+
+from fastapi.middleware.cors import CORSMiddleware
 
 setup_logging(settings.log_level)
 logger = logging.getLogger("api")
@@ -27,6 +35,19 @@ app = FastAPI(
     version="0.4.0",
     description="Gen 1: Step 4: embeddings + Qdrant indexing.",
 )
+
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=[
+        "http://localhost:3000",
+        "http://127.0.0.1:3000",
+    ],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
 
 DB = None  # set on startup
 
@@ -128,6 +149,129 @@ async def qdrant_collections() -> Dict[str, Any]:
         return await list_collections(client)
 
 
+
+@app.post("/chat", response_model=ChatResponse)
+async def chat(req: ChatRequest) -> ChatResponse:
+    """
+    Step 6: RAG chat w/ strict citations + abstention + model switch (fast/quality).
+    """
+    question = req.question.strip()
+    if not question:
+        raise HTTPException(status_code=400, detail="Question is empty")
+
+    t0 = time.perf_counter()
+
+    # 1) Embed question
+    t_embed0 = time.perf_counter()
+    qvec = embed_texts([question])[0]
+    embed_ms = int((time.perf_counter() - t_embed0) * 1000)
+
+    # 2) Retrieve
+    t_q0 = time.perf_counter()
+    async with httpx.AsyncClient() as client:
+        await ensure_collection(client, vector_size=embedding_dim())
+        raw_hits = await qdrant_search(client, query_vector=qvec, top_k=req.top_k, doc_id=req.doc_id)
+    qdrant_ms = int((time.perf_counter() - t_q0) * 1000)
+
+    # Convert hits
+    citations: List[Citation] = []
+    context_chunks: List[ContextChunk] = []
+
+    best_score = 0.0
+    for hit in raw_hits:
+        score = float(hit.get("score", 0.0))
+        if score > best_score:
+            best_score = score
+
+    # Abstain early if retrieval is weak
+    if not raw_hits or should_abstain_from_retrieval(best_score, req.min_score):
+        total_ms = int((time.perf_counter() - t0) * 1000)
+        return ChatResponse(
+            answer="I don't know based on the provided documents.",
+            abstained=True,
+            mode_used=req.mode,
+            model_used="none",
+            citations=[],
+            latency=LatencyBreakdown(embed_ms=embed_ms, qdrant_ms=qdrant_ms, llm_ms=0, total_ms=total_ms),
+        )
+
+    for hit in raw_hits:
+        score = float(hit.get("score", 0.0))
+        if score < req.min_score:
+            continue
+
+        payload = hit.get("payload") or {}
+        chunk_id = str(hit.get("id"))
+        doc_id = str(payload.get("doc_id", ""))
+        doc_name = str(payload.get("doc_name", ""))
+        page_number = int(payload.get("page_number", 0) or 0)
+        chunk_index = int(payload.get("chunk_index", 0) or 0)
+        text = str(payload.get("text", ""))
+
+        tag = f"[DOC={doc_name}|PAGE={page_number}|CHUNK={chunk_index}]"
+        context_chunks.append(ContextChunk(tag=tag, text=text))
+
+        citations.append(
+            Citation(
+                chunk_id=chunk_id,
+                score=score,
+                doc_id=doc_id,
+                doc_name=doc_name,
+                page_number=page_number,
+                chunk_index=chunk_index,
+                quote=text[:500],
+            )
+        )
+
+    # 3) Build prompt
+    prompt = build_prompt(question=question, chunks=context_chunks)
+
+    # 4) Pick model + generate with Ollama
+    t_llm0 = time.perf_counter()
+    async with httpx.AsyncClient() as client:
+        model = await pick_model(client, mode=req.mode)
+        try:
+            gen = await ollama_generate(client, model=model, prompt=prompt)
+            answer_raw = gen.response
+            model_used = gen.model
+        except Exception as e:
+            # If quality model fails, try fallbacks automatically via pick_model order is already applied,
+            # but failures can be runtime too. We'll do a second pass for quality mode.
+            if req.mode.lower().strip() == "quality":
+                from app.core.config import settings as _s
+                fallback_list = [m.strip() for m in _s.quality_fallback_models.split(",") if m.strip()]
+                last_err = str(e)
+                answer_raw = ""
+                model_used = model
+                for fb in fallback_list:
+                    try:
+                        gen = await ollama_generate(client, model=fb, prompt=prompt)
+                        answer_raw = gen.response
+                        model_used = fb
+                        last_err = ""
+                        break
+                    except Exception as e2:
+                        last_err = str(e2)
+                if not answer_raw:
+                    raise HTTPException(status_code=503, detail=f"Ollama generate failed: {last_err}")
+            else:
+                raise HTTPException(status_code=503, detail=f"Ollama generate failed: {str(e)}")
+
+    llm_ms = int((time.perf_counter() - t_llm0) * 1000)
+
+    # 5) Validate citations or abstain
+    abstained, answer = validate_or_abstain(answer_raw)
+
+    total_ms = int((time.perf_counter() - t0) * 1000)
+
+    return ChatResponse(
+        answer=answer,
+        abstained=abstained,
+        mode_used=req.mode,
+        model_used=model_used,
+        citations=citations,
+        latency=LatencyBreakdown(embed_ms=embed_ms, qdrant_ms=qdrant_ms, llm_ms=llm_ms, total_ms=total_ms),
+    )
 
 @app.post("/retrieve", response_model=RetrieveResponse)
 async def retrieve(req: RetrieveRequest) -> RetrieveResponse:

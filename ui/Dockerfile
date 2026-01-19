@@ -1,15 +1,14 @@
-FROM python:3.11-slim
-
-ENV PYTHONDONTWRITEBYTECODE=1
-ENV PYTHONUNBUFFERED=1
+FROM node:20-alpine
 
 WORKDIR /app
 
-COPY requirements.txt /app/requirements.txt
-RUN pip install --no-cache-dir -r /app/requirements.txt
+COPY package.json package-lock.json* ./
+RUN npm install
 
-COPY app.py /app/app.py
+COPY . .
 
-EXPOSE 8501
+RUN npm run build
 
-CMD ["streamlit", "run", "app.py", "--server.address=0.0.0.0", "--server.port=8501"]
+EXPOSE 3000
+
+CMD ["npm", "run", "start"]

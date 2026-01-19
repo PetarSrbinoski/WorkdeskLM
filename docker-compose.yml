@@ -27,13 +27,16 @@ services:
     build:
       context: ./ui
     container_name: notebooklm-ui
-    env_file:
-      - .env
     ports:
-      - "${UI_PORT:-8501}:8501"
+      - "3000:3000"
+    environment:
+      NEXT_PUBLIC_API_BASE: http://localhost:8000
+      API_INTERNAL_BASE: http://api:8000
+
     depends_on:
       - api
     restart: unless-stopped
+
 
 volumes:
   qdrant_data:

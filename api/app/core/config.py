@@ -11,8 +11,11 @@ class Settings(BaseSettings):
     qdrant_collection: str = "chunks_v1"
 
     ollama_base_url: str = "http://host.docker.internal:11434"
+    ollama_timeout_s: int = 120
+
     fast_model: str = "phi3:mini"
-    quality_model: str = "qwen2.5:7b-instruct "
+    quality_model: str = "qwen2.5:7b-instruct"
+    quality_fallback_models: str = "llama3.1:8b-instruct,deepseek-r1-distill-qwen:7b"
 
     sqlite_path: str = "/app/data/app.db"
 
