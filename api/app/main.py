@@ -10,6 +10,8 @@ from fastapi.responses import JSONResponse
 
 from app.core.config import settings
 from app.core.logging import setup_logging
+from app.core.embeddings import embed_texts, embedding_dim
+from app.core.qdrant import ensure_collection, upsert_points, delete_points_by_doc_id, list_collections
 from app.db.sqlite import connect, fetch_all, fetch_one, init_db, tx
 from app.ingestion.chunking import chunk_text
 from app.ingestion.parser import parse_file, sha256_bytes
@@ -20,8 +22,8 @@ logger = logging.getLogger("api")
 
 app = FastAPI(
     title="NotebookLM-Clone API (Gen 1)",
-    version="0.3.0",
-    description="Gen 1: local-first cited doc chat. Step 3: chunking + chunk storage.",
+    version="0.4.0",
+    description="Gen 1: Step 4: embeddings + Qdrant indexing.",
 )
 
 DB = None  # set on startup
@@ -83,6 +85,12 @@ async def _startup() -> None:
     init_db(DB)
     logger.info("sqlite initialized path=%s", settings.sqlite_path)
 
+    # Ensure Qdrant collection exists (Step 4)
+    dim = embedding_dim()
+    async with httpx.AsyncClient() as client:
+        await ensure_collection(client, vector_size=dim)
+    logger.info("qdrant collection ready name=%s dim=%s", settings.qdrant_collection, dim)
+
 
 @app.get("/health")
 async def health() -> JSONResponse:
@@ -96,6 +104,11 @@ async def health() -> JSONResponse:
         "status": status,
         "env": settings.app_env,
         "services": {"qdrant": qdrant, "ollama": ollama},
+        "embedding": {
+            "model": settings.embedding_model,
+            "dim": embedding_dim(),
+            "collection": settings.qdrant_collection,
+        },
     }
     code = 200 if status == "ok" else 503
     logger.info("health status=%s qdrant_ok=%s ollama_ok=%s", status, qdrant["ok"], ollama["ok"])
@@ -107,10 +120,16 @@ async def root() -> Dict[str, str]:
     return {"message": "NotebookLM-Clone API is running. See /docs, /health, /ingest."}
 
 
+@app.get("/qdrant/collections")
+async def qdrant_collections() -> Dict[str, Any]:
+    async with httpx.AsyncClient() as client:
+        return await list_collections(client)
+
+
 @app.post("/ingest", response_model=IngestResponse)
 async def ingest(file: UploadFile = File(...)) -> IngestResponse:
     """
-    Step 3: Upload a PDF/TXT/MD, parse into pages, chunk into overlap chunks, store in SQLite.
+    Step 4: Upload -> parse pages -> chunk -> store SQLite -> embed chunks -> upsert Qdrant.
     Dedupe by sha256.
     """
     if not file.filename:
@@ -144,12 +163,31 @@ async def ingest(file: UploadFile = File(...)) -> IngestResponse:
     doc_id = str(uuid4())
     now = utc_now_iso()
 
-    # Chunking defaults (Gen 1 v1)
+    # Chunk defaults
     chunk_size = 900
     overlap = 150
 
-    total_chunks = 0
+    # Build chunk records in memory first so we can embed and upsert
+    chunk_rows: List[Dict[str, Any]] = []
+    for p in pages:
+        chunks = chunk_text(p.text, chunk_size=chunk_size, overlap=overlap)
+        for ch in chunks:
+            chunk_rows.append(
+                {
+                    "id": str(uuid4()),
+                    "doc_id": doc_id,
+                    "page_number": p.page_number,
+                    "chunk_index": ch.chunk_index,
+                    "start_char": ch.start_char,
+                    "end_char": ch.end_char,
+                    "text": ch.text,
+                    "created_at": now,
+                }
+            )
 
+    total_chunks = len(chunk_rows)
+
+    # Store SQLite (docs + pages + chunks)
     with tx(DB):
         DB.execute(
             """
@@ -159,40 +197,62 @@ async def ingest(file: UploadFile = File(...)) -> IngestResponse:
             (doc_id, file.filename, mime_type, sha256, len(raw), page_count, now),
         )
 
-        # store pages + chunks
         for p in pages:
-            page_id = str(uuid4())
             DB.execute(
                 """
                 INSERT INTO pages (id, doc_id, page_number, text, created_at)
                 VALUES (?, ?, ?, ?, ?)
                 """,
-                (page_id, doc_id, p.page_number, p.text, now),
+                (str(uuid4()), doc_id, p.page_number, p.text, now),
             )
 
-            chunks = chunk_text(p.text, chunk_size=chunk_size, overlap=overlap)
-            for ch in chunks:
-                chunk_id = str(uuid4())
-                DB.execute(
-                    """
-                    INSERT INTO chunks (id, doc_id, page_number, chunk_index, start_char, end_char, text, created_at)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-                    """,
-                    (
-                        chunk_id,
-                        doc_id,
-                        p.page_number,
-                        ch.chunk_index,
-                        ch.start_char,
-                        ch.end_char,
-                        ch.text,
-                        now,
-                    ),
-                )
-            total_chunks += len(chunks)
+        for row in chunk_rows:
+            DB.execute(
+                """
+                INSERT INTO chunks (id, doc_id, page_number, chunk_index, start_char, end_char, text, created_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    row["id"],
+                    row["doc_id"],
+                    row["page_number"],
+                    row["chunk_index"],
+                    row["start_char"],
+                    row["end_char"],
+                    row["text"],
+                    row["created_at"],
+                ),
+            )
+
+    # Embed + upsert to Qdrant
+    texts = [r["text"] for r in chunk_rows]
+    vectors = embed_texts(texts)
+    if len(vectors) != len(chunk_rows):
+        raise HTTPException(status_code=500, detail="Embedding count mismatch")
+
+    points: List[Dict[str, Any]] = []
+    for row, vec in zip(chunk_rows, vectors):
+        points.append(
+            {
+                "id": row["id"],  # same as SQLite chunk id
+                "vector": vec,
+                "payload": {
+                    "doc_id": doc_id,
+                    "doc_name": file.filename,
+                    "page_number": row["page_number"],
+                    "chunk_index": row["chunk_index"],
+                    "text": row["text"],
+                },
+            }
+        )
+
+    async with httpx.AsyncClient() as client:
+        # Ensure collection exists (in case container restarted without startup hook)
+        await ensure_collection(client, vector_size=embedding_dim())
+        await upsert_points(client, points)
 
     logger.info(
-        "ingested doc_id=%s name=%s pages=%s chunks=%s size=%s",
+        "ingested+indexed doc_id=%s name=%s pages=%s chunks=%s size=%s",
         doc_id,
         file.filename,
         page_count,
@@ -229,9 +289,6 @@ async def list_documents() -> Dict[str, Any]:
 
 @app.get("/documents/{doc_id}/chunks")
 async def list_chunks(doc_id: str, limit: int = 20, page: Optional[int] = None) -> Dict[str, Any]:
-    """
-    Debug endpoint to inspect chunking quality.
-    """
     existing = fetch_one(DB, "SELECT id, name, page_count FROM documents WHERE id = ?", (doc_id,))
     if not existing:
         raise HTTPException(status_code=404, detail="Document not found")
@@ -269,15 +326,23 @@ async def list_chunks(doc_id: str, limit: int = 20, page: Optional[int] = None) 
 @app.delete("/documents/{doc_id}")
 async def delete_document(doc_id: str) -> Dict[str, Any]:
     """
-    Delete a document and all its pages/chunks (FK cascade).
-    Step 4+: also delete vectors from Qdrant.
+    Step 4: Delete document from SQLite + delete Qdrant vectors.
     """
     existing = fetch_one(DB, "SELECT id, name FROM documents WHERE id = ?", (doc_id,))
     if not existing:
         raise HTTPException(status_code=404, detail="Document not found")
 
+    # Delete vectors first (best-effort). If Qdrant is down, don't leave SQLite deleted silently.
+    async with httpx.AsyncClient() as client:
+        try:
+            await ensure_collection(client, vector_size=embedding_dim())
+            await delete_points_by_doc_id(client, doc_id=doc_id)
+        except Exception as e:
+            logger.exception("qdrant delete failed doc_id=%s err=%s", doc_id, str(e))
+            raise HTTPException(status_code=503, detail="Qdrant unavailable; aborting delete to keep consistency")
+
     with tx(DB):
         DB.execute("DELETE FROM documents WHERE id = ?", (doc_id,))
 
-    logger.info("deleted doc_id=%s name=%s", existing["id"], existing["name"])
+    logger.info("deleted doc_id=%s name=%s (sqlite + qdrant)", existing["id"], existing["name"])
     return {"deleted": True, "doc_id": doc_id}

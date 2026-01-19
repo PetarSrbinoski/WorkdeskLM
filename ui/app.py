@@ -6,7 +6,7 @@ API_BASE = os.getenv("API_BASE_URL", "http://api:8000").rstrip("/")
 
 st.set_page_config(page_title="NotebookLM-Clone (Gen 1)", layout="wide")
 st.title("📚 NotebookLM-Clone (Gen 1)")
-st.caption("Step 3: Chunking (overlap) → store chunks locally (SQLite)")
+st.caption("Step 4: Embed chunks locally → index in Qdrant")
 
 left, right = st.columns([1, 2], gap="large")
 
@@ -34,20 +34,20 @@ with left:
     st.write("API Base:", API_BASE)
 
     st.divider()
-    st.subheader("Upload document (Ingest + Chunk)")
+    st.subheader("Upload document (Ingest + Chunk + Embed + Index)")
 
     uploaded = st.file_uploader("PDF / TXT / MD", type=["pdf", "txt", "md"])
     if uploaded is not None:
         if st.button("⬆️ Ingest"):
             files = {"file": (uploaded.name, uploaded.getvalue(), uploaded.type or "application/octet-stream")}
             try:
-                with httpx.Client(timeout=120.0) as c:
+                with httpx.Client(timeout=180.0) as c:
                     r = c.post(f"{API_BASE}/ingest", files=files)
                 if r.status_code >= 400:
                     st.error(f"Ingest failed (HTTP {r.status_code})")
                     st.code(r.text)
                 else:
-                    st.success("Ingested ✅")
+                    st.success("Ingested + Indexed ✅")
                     st.session_state.last_ingest = r.json()
             except Exception as e:
                 st.error(str(e))
@@ -55,6 +55,20 @@ with left:
     if "last_ingest" in st.session_state:
         st.subheader("Last ingest result")
         st.json(st.session_state.last_ingest)
+
+    st.divider()
+    st.subheader("Qdrant debug")
+    if st.button("List Qdrant collections"):
+        try:
+            with httpx.Client(timeout=10.0) as c:
+                r = c.get(f"{API_BASE}/qdrant/collections")
+            if r.status_code == 200:
+                st.json(r.json())
+            else:
+                st.error(f"Failed (HTTP {r.status_code})")
+                st.code(r.text)
+        except Exception as e:
+            st.error(str(e))
 
 with right:
     st.subheader("Documents")
@@ -99,7 +113,6 @@ with right:
                 if cr.status_code == 200:
                     chunks_payload = cr.json()
                     st.write(f"Returned chunks: {chunks_payload['count']}")
-                    # Show just a readable table-ish view
                     for ch in chunks_payload["chunks"]:
                         st.markdown(
                             f"**Page {ch['page_number']} | Chunk {ch['chunk_index']} | "
@@ -115,7 +128,7 @@ with right:
             st.info("No documents yet.")
 
         st.divider()
-        st.subheader("Delete a document")
+        st.subheader("Delete a document (SQLite + Qdrant)")
 
         if not documents:
             st.info("No documents to delete.")
@@ -127,10 +140,10 @@ with right:
             selected_label = st.selectbox("Select document", list(options.keys()), key="delete_doc")
             selected_id = options[selected_label]
 
-            confirm = st.checkbox("I understand this will permanently delete the document (SQLite).")
+            confirm = st.checkbox("I understand this will permanently delete the document and its vectors.")
             if st.button("🗑️ Delete selected", disabled=not confirm):
                 try:
-                    with httpx.Client(timeout=10.0) as c:
+                    with httpx.Client(timeout=20.0) as c:
                         dr = c.delete(f"{API_BASE}/documents/{selected_id}")
                     if dr.status_code == 200:
                         st.success("Deleted ✅")
@@ -144,7 +157,6 @@ with right:
 st.divider()
 st.subheader("Next up")
 st.write(
-    "- Step 4: Embeddings + Qdrant upsert for chunks\n"
-    "- Step 5: /retrieve endpoint using Qdrant\n"
-    "- Step 6: /chat using Ollama with strict citations + abstention gate\n"
+    "- Step 5: /retrieve endpoint (embed query → Qdrant search → return chunks+scores)\n"
+    "- Step 6: /chat endpoint with strict citations + abstention gate + model mode switch\n"
 )
