@@ -16,6 +16,8 @@ from app.db.sqlite import connect, fetch_all, fetch_one, init_db, tx
 from app.ingestion.chunking import chunk_text
 from app.ingestion.parser import parse_file, sha256_bytes
 from app.schemas.ingest import IngestResponse
+from app.schemas.retrieve import RetrieveRequest, RetrieveResponse, RetrievedChunk
+from app.core.qdrant import search as qdrant_search
 
 setup_logging(settings.log_level)
 logger = logging.getLogger("api")
@@ -126,6 +128,55 @@ async def qdrant_collections() -> Dict[str, Any]:
         return await list_collections(client)
 
 
+
+@app.post("/retrieve", response_model=RetrieveResponse)
+async def retrieve(req: RetrieveRequest) -> RetrieveResponse:
+    """
+    Step 5: Embed question -> Qdrant vector search -> return chunks+scores.
+    """
+    question = req.question.strip()
+    if not question:
+        raise HTTPException(status_code=400, detail="Question is empty")
+
+    # Embed query
+    qvec = embed_texts([question])[0]
+
+    async with httpx.AsyncClient() as client:
+        await ensure_collection(client, vector_size=embedding_dim())
+        raw_hits = await qdrant_search(
+            client,
+            query_vector=qvec,
+            top_k=req.top_k,
+            doc_id=req.doc_id,
+        )
+
+    results: List[RetrievedChunk] = []
+    for hit in raw_hits:
+        score = float(hit.get("score", 0.0))
+        if score < req.min_score:
+            continue
+
+        payload = hit.get("payload") or {}
+        results.append(
+            RetrievedChunk(
+                chunk_id=str(hit.get("id")),
+                score=score,
+                doc_id=str(payload.get("doc_id", "")),
+                doc_name=str(payload.get("doc_name", "")),
+                page_number=int(payload.get("page_number", 0) or 0),
+                chunk_index=int(payload.get("chunk_index", 0) or 0),
+                text=str(payload.get("text", "")),
+            )
+        )
+
+    return RetrieveResponse(
+        question=req.question,
+        top_k=req.top_k,
+        min_score=req.min_score,
+        results=results,
+    )
+
+
 @app.post("/ingest", response_model=IngestResponse)
 async def ingest(file: UploadFile = File(...)) -> IngestResponse:
     """
@@ -141,7 +192,6 @@ async def ingest(file: UploadFile = File(...)) -> IngestResponse:
 
     sha256 = sha256_bytes(raw)
 
-    # Dedupe check
     existing = fetch_one(DB, "SELECT * FROM documents WHERE sha256 = ?", (sha256,))
     if existing:
         cnt = fetch_one(DB, "SELECT COUNT(*) AS c FROM chunks WHERE doc_id = ?", (existing["id"],))
@@ -163,7 +213,6 @@ async def ingest(file: UploadFile = File(...)) -> IngestResponse:
     doc_id = str(uuid4())
     now = utc_now_iso()
 
-    # Chunk defaults
     chunk_size = 900
     overlap = 150
 
@@ -247,7 +296,6 @@ async def ingest(file: UploadFile = File(...)) -> IngestResponse:
         )
 
     async with httpx.AsyncClient() as client:
-        # Ensure collection exists (in case container restarted without startup hook)
         await ensure_collection(client, vector_size=embedding_dim())
         await upsert_points(client, points)
 

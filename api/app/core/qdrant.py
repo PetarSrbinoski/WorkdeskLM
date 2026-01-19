@@ -74,3 +74,30 @@ async def list_collections(client: httpx.AsyncClient) -> Dict[str, Any]:
     r = await client.get(url, timeout=5.0)
     r.raise_for_status()
     return r.json()
+
+
+async def search(
+    client: httpx.AsyncClient,
+    query_vector: List[float],
+    top_k: int,
+    doc_id: Optional[str] = None,
+) -> List[Dict[str, Any]]:
+    """
+    Qdrant search using /points/search endpoint.
+    Returns raw Qdrant 'result' entries.
+    """
+    url = f"{_collection_url()}/points/search"
+    payload: Dict[str, Any] = {
+        "vector": query_vector,
+        "limit": top_k,
+        "with_payload": True,
+        "with_vector": False,
+    }
+
+    if doc_id:
+        payload["filter"] = {"must": [{"key": "doc_id", "match": {"value": doc_id}}]}
+
+    r = await client.post(url, json=payload, timeout=30.0)
+    r.raise_for_status()
+    data = r.json()
+    return data.get("result", [])

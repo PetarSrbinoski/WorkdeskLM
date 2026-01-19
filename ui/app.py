@@ -55,6 +55,42 @@ with left:
     if "last_ingest" in st.session_state:
         st.subheader("Last ingest result")
         st.json(st.session_state.last_ingest)
+    st.divider()
+    st.subheader("Retrieval test (Step 5)")
+
+    q = st.text_area("Ask a question (retrieval only)", height=80, placeholder="e.g., What is the refund policy?")
+    top_k = st.slider("top_k", 1, 20, 6)
+    min_score = st.slider("min_score", 0.0, 1.0, 0.25)
+
+    doc_filter = None
+    if st.checkbox("Filter by a specific doc_id"):
+        doc_filter = st.text_input("doc_id (paste from Documents list)")
+
+    if st.button("🔎 Retrieve"):
+        try:
+            payload = {"question": q, "top_k": int(top_k), "min_score": float(min_score)}
+            if doc_filter:
+                payload["doc_id"] = doc_filter.strip()
+
+            with httpx.Client(timeout=30.0) as c:
+                r = c.post(f"{API_BASE}/retrieve", json=payload)
+
+            if r.status_code != 200:
+                st.error(f"Retrieve failed (HTTP {r.status_code})")
+                st.code(r.text)
+            else:
+                st.success("Retrieved ✅")
+                data = r.json()
+                st.json(data)
+
+                # Nice readable view
+                for i, res in enumerate(data.get("results", []), start=1):
+                    st.markdown(
+                        f"**#{i} Score={res['score']:.3f} | {res['doc_name']} | Page {res['page_number']} | Chunk {res['chunk_index']}**"
+                    )
+                    st.code(res["text"][:1200])
+        except Exception as e:
+            st.error(str(e))
 
     st.divider()
     st.subheader("Qdrant debug")
