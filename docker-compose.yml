@@ -1,0 +1,37 @@
+services:
+  qdrant:
+    image: qdrant/qdrant:latest
+    container_name: notebooklm-qdrant
+    ports:
+      - "${QDRANT_PORT:-6333}:6333"
+      - "6334:6334"
+    volumes:
+      - qdrant_data:/qdrant/storage
+    restart: unless-stopped
+
+  api:
+    build:
+      context: ./api
+    container_name: notebooklm-api
+    env_file:
+      - .env
+    ports:
+      - "${API_PORT:-8000}:8000"
+    depends_on:
+      - qdrant
+    restart: unless-stopped
+
+  ui:
+    build:
+      context: ./ui
+    container_name: notebooklm-ui
+    env_file:
+      - .env
+    ports:
+      - "${UI_PORT:-8501}:8501"
+    depends_on:
+      - api
+    restart: unless-stopped
+
+volumes:
+  qdrant_data:
