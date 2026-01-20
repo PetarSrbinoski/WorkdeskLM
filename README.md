@@ -142,6 +142,25 @@ This project was built to resemble real-world AI systems rather than demos, and 
 
 #### Before you start make sure you have Ollama installed with the models: 
 `phi3:mini` and `qwen2.5:7b-instruct`
+
+for windows:
+
+ ```bash
+   winget install Ollama.Ollama
+   ollama pull phi3:mini
+   ollama pull qwen2.5:7b-instruct
+   ```
+
+for unix:
+
+ ```bash
+   curl -fsSL https://ollama.com/install.sh | sh
+   ollama pull phi3:mini
+   ollama pull qwen2.5:7b-instruct
+   ```
+
+After installing make sure its running. 
+
 1. Start all services:
    ```bash
    docker compose up -d --build
