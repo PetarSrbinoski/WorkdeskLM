@@ -1,3 +1,4 @@
+// FILE: components/sidebar.tsx
 'use client'
 
 import { useEffect, useState, useCallback } from 'react'
@@ -22,8 +23,8 @@ interface SidebarProps {
   onGoHome?: () => void
 }
 
-export function Sidebar({ 
-  onError, 
+export function Sidebar({
+  onError,
   onDocumentsChange,
   citationCount = 0,
   onSourcesClick,
@@ -69,11 +70,11 @@ export function Sidebar({
   }
 
   return (
-    <aside className="w-72 border-r bg-sidebar flex flex-col h-full">
+    <aside className="w-100 border-r bg-sidebar flex flex-col h-full">
       {/* Header with logo and theme toggle */}
       <div className="p-4 border-b">
         <div className="flex items-center justify-between">
-          <button 
+          <button
             type="button"
             onClick={onGoHome}
             className="flex items-center gap-2 hover:opacity-80 transition-opacity cursor-pointer"
@@ -82,7 +83,7 @@ export function Sidebar({
               <BookOpen className="size-4 text-white" />
             </div>
             <div className="text-left">
-              <h1 className="text-sm font-semibold">NotebookLM</h1>
+              <h1 className="text-sm font-semibold">WorkdeskLM</h1>
               <p className="text-xs text-muted-foreground">Local-first AI</p>
             </div>
           </button>
@@ -139,7 +140,7 @@ export function Sidebar({
                 No documents yet. Upload one to get started.
               </p>
             ) : (
-              <div className="space-y-2">
+              <div className="space-y-2 max-h-96 overflow-y-auto pr-1">
                 {documents.map((doc) => (
                   <DocumentCard
                     key={doc.id}

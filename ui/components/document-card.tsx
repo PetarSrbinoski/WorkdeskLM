@@ -35,7 +35,7 @@ export function DocumentCard({ document, onDelete }: DocumentCardProps) {
   }
 
   return (
-    <Card className="py-3 group">
+    <Card className="py-3 group w-90">
       <CardContent className="flex items-start gap-3">
         <div className="size-8 rounded bg-accent flex items-center justify-center shrink-0">
           <FileText className="size-4 text-muted-foreground" />

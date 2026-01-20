@@ -1,6 +1,6 @@
-  # WorkbookLM — Local-First NotebookLM-Style RAG System
+  # WorkdeskLM — Local-First NotebookLM-Style RAG System
 
-  WorkbookLM is a fully local, document-grounded AI assistant inspired by Google’s NotebookLM.
+  WorkdeskLM is a fully local, document-grounded AI assistant inspired by Google’s NotebookLM.
   It runs entirely on a local machine (Windows + Docker + WSL2) and provides citation-grounded
   answers with strict abstention when information is missing.
 
@@ -30,7 +30,7 @@
 
   [ Architecture diagram image goes here ]
 
-  WorkbookLM is composed of three main services:
+  WorkdeskLM is composed of three main services:
 
   • UI (Next.js + Tailwind)
       – Chat interface
@@ -55,7 +55,7 @@
 
   ---
 
-  ## How RAG Works in WorkbookLM
+  ## How RAG Works in WorkdeskLM
 
   1) A document is uploaded (PDF / TXT / MD)
   2) The document is parsed into pages
@@ -77,16 +77,15 @@
 
   ## Local Models
 
-  WorkbookLM uses Ollama for local LLM execution:
+  WorkdeskLM uses Ollama for local LLM execution:
 
   • Fast mode:
       – phi3:mini
       – Optimized for responsiveness
 
   • Quality mode:
-      – deepseek-r1-distill-qwen:7b (4-bit)
+      – qwen2.5:7b-instruct
       – Automatic fallback to:
-          – qwen2.5:7b-instruct
           – llama3.1:8b-instruct
 
   Model selection happens at runtime via the UI.
@@ -143,7 +142,7 @@
 
   ## Design Philosophy
 
-  WorkbookLM prioritizes:
+  WorkdeskLM prioritizes:
   • Correctness over fluency
   • Explicit provenance over hallucination
   • Measurable improvements over demos

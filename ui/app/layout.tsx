@@ -8,7 +8,7 @@ const _geist = Geist({ subsets: ["latin"] });
 const _geistMono = Geist_Mono({ subsets: ["latin"] });
 
 export const metadata: Metadata = {
-  title: 'NotebookLM Clone',
+  title: 'WorkdeskLM',
   description: 'Local-first AI assistant for your documents',
   generator: 'v0.app',
   icons: {

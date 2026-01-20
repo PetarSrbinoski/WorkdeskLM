@@ -1,3 +1,4 @@
+// FILE: components/landing-page.tsx
 'use client'
 
 import { Button } from '@/components/ui/button'
@@ -31,12 +32,12 @@ export function LandingPage({ onStart, darkMode, onToggleDarkMode }: LandingPage
           className="w-full h-full"
         />
       </div>
-      
+
       {/* Theme Toggle */}
       <div className="absolute top-6 right-6 z-10">
-        <Button 
-          variant="ghost" 
-          size="icon" 
+        <Button
+          variant="ghost"
+          size="icon"
           onClick={onToggleDarkMode}
           className="rounded-full bg-background/50 backdrop-blur-sm border size-10"
         >
@@ -47,7 +48,7 @@ export function LandingPage({ onStart, darkMode, onToggleDarkMode }: LandingPage
       {/* Main Content */}
       <div className="relative z-10 min-h-screen flex flex-col items-center justify-center px-6">
         {/* Logo */}
-        <div 
+        <div
           className="size-20 sm:size-24 rounded-2xl bg-crimson flex items-center justify-center mb-10 shadow-lg"
           style={{ boxShadow: '0 10px 40px oklch(0.5 0.2 25 / 0.4)' }}
         >
@@ -56,7 +57,7 @@ export function LandingPage({ onStart, darkMode, onToggleDarkMode }: LandingPage
 
         {/* Title */}
         <h1 className="text-5xl sm:text-6xl md:text-7xl lg:text-8xl font-bold tracking-tight text-center mb-6">
-          <span className="text-foreground">Notebook</span>
+          <span className="text-foreground">Workdesk</span>
           <span className="text-crimson">LM</span>
         </h1>
 

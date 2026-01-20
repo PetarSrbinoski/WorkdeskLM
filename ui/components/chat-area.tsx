@@ -41,8 +41,8 @@ export function ChatArea({
   }, [messages, onCitationsChange])
 
   return (
-    <div className="flex flex-col h-full">
-      <div className="flex items-center justify-between px-4 py-3 border-b">
+    <div className="flex flex-col h-full max-h-screen overflow-hidden">
+      <div className="flex items-center justify-between px-4 py-3 border-b shrink-0">
         <div className="flex items-center gap-2">
           <MessageSquare className="size-5 text-muted-foreground" />
           <h2 className="font-medium">Chat</h2>
@@ -54,54 +54,58 @@ export function ChatArea({
           </Button>
         )}
       </div>
-      
-      <ScrollArea className="flex-1" ref={scrollRef}>
-        <div className="p-4 space-y-4">
-          {messages.length === 0 && !loading && documents.length === 0 && (
-            <div className="flex flex-col items-center justify-center py-12 text-center">
-              <div className="size-16 rounded-full bg-accent flex items-center justify-center mb-4">
-                <Upload className="size-8 text-muted-foreground" />
+
+      <div className="flex-1 overflow-hidden">
+        <ScrollArea className="h-full">
+          <div className="p-4 space-y-4">
+            {messages.length === 0 && !loading && documents.length === 0 && (
+              <div className="flex flex-col items-center justify-center py-12 text-center">
+                <div className="size-16 rounded-full bg-accent flex items-center justify-center mb-4">
+                  <Upload className="size-8 text-muted-foreground" />
+                </div>
+                <h3 className="font-medium mb-1">Upload a document first</h3>
+                <p className="text-sm text-muted-foreground max-w-sm">
+                  Use the sidebar to upload a PDF, TXT, or Markdown file. Once uploaded, you can start asking questions about your documents.
+                </p>
               </div>
-              <h3 className="font-medium mb-1">Upload a document first</h3>
-              <p className="text-sm text-muted-foreground max-w-sm">
-                Use the sidebar to upload a PDF, TXT, or Markdown file. Once uploaded, you can start asking questions about your documents.
-              </p>
-            </div>
-          )}
-          
-          {messages.length === 0 && !loading && documents.length > 0 && (
-            <div className="flex flex-col items-center justify-center py-12 text-center">
-              <div className="size-16 rounded-full bg-accent flex items-center justify-center mb-4">
-                <MessageSquare className="size-8 text-muted-foreground" />
+            )}
+
+            {messages.length === 0 && !loading && documents.length > 0 && (
+              <div className="flex flex-col items-center justify-center py-12 text-center">
+                <div className="size-16 rounded-full bg-accent flex items-center justify-center mb-4">
+                  <MessageSquare className="size-8 text-muted-foreground" />
+                </div>
+                <h3 className="font-medium mb-1">Start a conversation</h3>
+                <p className="text-sm text-muted-foreground max-w-sm">
+                  Ask questions about your uploaded documents. The AI will search through your knowledge base to provide answers with citations.
+                </p>
               </div>
-              <h3 className="font-medium mb-1">Start a conversation</h3>
-              <p className="text-sm text-muted-foreground max-w-sm">
-                Ask questions about your uploaded documents. The AI will search through your knowledge base to provide answers with citations.
-              </p>
-            </div>
-          )}
-          
-          {messages.map((message) => (
-            <ChatMessage key={message.id} message={message} />
-          ))}
-          
-          {loading && (
-            <div className="flex justify-start">
-              <div className="max-w-[80%] space-y-2">
-                <div className="bg-secondary rounded-t-none rounded-b-lg rounded-r-lg px-4 py-3">
-                  <div className="space-y-2">
-                    <Skeleton className="h-4 w-[250px]" />
-                    <Skeleton className="h-4 w-[200px]" />
-                    <Skeleton className="h-4 w-[180px]" />
+            )}
+
+            {messages.map((message) => (
+              <ChatMessage key={message.id} message={message} />
+            ))}
+
+            {loading && (
+              <div className="flex justify-start">
+                <div className="max-w-[80%] space-y-2">
+                  <div className="bg-secondary rounded-t-none rounded-b-lg rounded-r-lg px-4 py-3">
+                    <div className="space-y-2">
+                      <Skeleton className="h-4 w-[250px]" />
+                      <Skeleton className="h-4 w-[200px]" />
+                      <Skeleton className="h-4 w-[180px]" />
+                    </div>
                   </div>
                 </div>
               </div>
-            </div>
-          )}
-        </div>
-      </ScrollArea>
-      
-      <ChatInput onSend={onSend} documents={documents} disabled={loading} />
+            )}
+          </div>
+        </ScrollArea>
+      </div>
+
+      <div className="shrink-0">
+        <ChatInput onSend={onSend} documents={documents} disabled={loading} />
+      </div>
     </div>
   )
 }

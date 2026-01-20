@@ -68,7 +68,7 @@ export function HealthStatus() {
   const allOk = qdrantOk && ollamaOk
 
   return (
-    <Card className={`py-4 ${!allOk ? 'border-amber-500/50' : ''}`}>
+    <Card className={`py-4 ${!allOk ? 'border-amber-500/50' : ''} w-90` }>
       <CardHeader className="py-0 pb-2">
         <CardTitle className="text-sm font-medium flex items-center justify-between">
           System Status

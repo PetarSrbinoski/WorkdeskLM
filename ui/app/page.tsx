@@ -21,16 +21,16 @@ export default function HomePage() {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [sidebarOpen, setSidebarOpen] = useState(false)
-  const [darkMode, setDarkMode] = useState(false)
+  const [darkMode, setDarkMode] = useState(false) // Now defaults to light mode
 
-  // Initialize dark mode from system preference on mount
-  useEffect(() => {
-    const isDark = window.matchMedia('(prefers-color-scheme: dark)').matches
-    setDarkMode(isDark)
-    if (isDark) {
-      document.documentElement.classList.add('dark')
-    }
-  }, [])
+  // Remove or comment out the system preference check
+  // useEffect(() => {
+  //   const isDark = window.matchMedia('(prefers-color-scheme: dark)').matches
+  //   setDarkMode(isDark)
+  //   if (isDark) {
+  //     document.documentElement.classList.add('dark')
+  //   }
+  // }, [])
 
   const toggleDarkMode = () => {
     const newDarkMode = !darkMode
@@ -108,8 +108,8 @@ export default function HomePage() {
   // Show landing page if chat hasn't started
   if (!showChat) {
     return (
-      <LandingPage 
-        onStart={() => setShowChat(true)} 
+      <LandingPage
+        onStart={() => setShowChat(true)}
         darkMode={darkMode}
         onToggleDarkMode={toggleDarkMode}
       />
@@ -120,8 +120,8 @@ export default function HomePage() {
     <div className="h-screen flex bg-background">
       {/* Desktop Sidebar */}
       <div className="hidden md:block">
-        <Sidebar 
-          onError={handleError} 
+        <Sidebar
+          onError={handleError}
           onDocumentsChange={handleDocumentsChange}
           citationCount={citations?.length ?? 0}
           onSourcesClick={() => setSourcesOpen(true)}
@@ -134,8 +134,8 @@ export default function HomePage() {
       {/* Mobile Sidebar */}
       <Sheet open={sidebarOpen} onOpenChange={setSidebarOpen}>
         <SheetContent side="left" className="p-0 w-72">
-          <Sidebar 
-            onError={handleError} 
+          <Sidebar
+            onError={handleError}
             onDocumentsChange={handleDocumentsChange}
             citationCount={citations?.length ?? 0}
             onSourcesClick={() => {
@@ -163,7 +163,7 @@ export default function HomePage() {
               </Button>
             </SheetTrigger>
           </Sheet>
-          <span className="font-semibold">NotebookLM</span>
+          <span className="font-semibold">WorkdeskLM</span>
           <div className="w-10" /> {/* Spacer for alignment */}
         </header>
 

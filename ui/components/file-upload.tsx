@@ -77,7 +77,7 @@ export function FileUpload({ onUpload, disabled }: FileUploadProps) {
       onDragOver={handleDragOver}
       onDragLeave={handleDragLeave}
     >
-      <CardContent className="flex flex-col items-center gap-3">
+      <CardContent className="flex flex-col items-center gap-3 w-90">
         <div className={cn(
           'size-10 rounded-full flex items-center justify-center transition-colors',
           isDragging ? 'bg-crimson/10' : 'bg-accent'

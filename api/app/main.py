@@ -31,7 +31,7 @@ setup_logging(settings.log_level)
 logger = logging.getLogger("api")
 
 app = FastAPI(
-    title="NotebookLM-Clone API (Gen 1)",
+    title="WorkdeskLM API (Gen 1)",
     version="0.4.0",
     description="Gen 1: Step 4: embeddings + Qdrant indexing.",
 )
@@ -140,7 +140,7 @@ async def health() -> JSONResponse:
 
 @app.get("/")
 async def root() -> Dict[str, str]:
-    return {"message": "NotebookLM-Clone API is running. See /docs, /health, /ingest."}
+    return {"message": "Workdesk API is running. See /docs, /health, /ingest."}
 
 
 @app.get("/qdrant/collections")
