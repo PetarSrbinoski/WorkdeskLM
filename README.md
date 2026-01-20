@@ -39,6 +39,8 @@ WorkdeskLM consists of the following core components:
 - **LLMs**: Ollama (Fast / Quality modes)
 - **Observability**: OpenTelemetry, Prometheus, Grafana, Loki, Tempo
 
+![Project architecture](data/architecture.png)
+
 The system implements a multi-stage RAG pipeline with reranking, guardrails, session memory, and evaluation hooks.
 
 ---
