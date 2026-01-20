@@ -141,7 +141,7 @@ This project was built to resemble real-world AI systems rather than demos, and 
 ## Running the Project
 
 #### Before you start make sure you have Ollama installed with the models: 
-'phi3:mini' and 'qwen2.5:7b-instruct'
+`phi3:mini` and `qwen2.5:7b-instruct`
 
 1. Start all services:
    ```bash
