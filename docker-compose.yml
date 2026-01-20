@@ -36,7 +36,65 @@ services:
     depends_on:
       - api
     restart: unless-stopped
+  otel-collector:
+    image: otel/opentelemetry-collector-contrib:0.103.0
+    container_name: workdesklm-otel-collector
+    command: ["--config=/etc/otelcol/config.yml"]
+    volumes:
+      - ./infra/observability/otel-collector.yml:/etc/otelcol/config.yml:ro
+    ports:
+      - "4317:4317"   # OTLP gRPC
+      - "4318:4318"   # OTLP HTTP
+      - "8889:8889"   # Prometheus metrics exporter (from collector)
+    depends_on:
+      - tempo
+      - loki
 
+  prometheus:
+    image: prom/prometheus:v2.54.1
+    container_name: workdesklm-prometheus
+    volumes:
+      - ./infra/observability/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+    ports:
+      - "9090:9090"
+    depends_on:
+      - otel-collector
+
+  loki:
+    image: grafana/loki:2.9.8
+    container_name: workdesklm-loki
+    command: ["-config.file=/etc/loki/config.yml"]
+    volumes:
+      - ./infra/observability/loki-config.yml:/etc/loki/config.yml:ro
+    ports:
+      - "3100:3100"
+
+  tempo:
+    image: grafana/tempo:2.5.0
+    container_name: workdesklm-tempo
+    command: ["-config.file=/etc/tempo.yml"]
+    volumes:
+      - ./infra/observability/tempo.yml:/etc/tempo.yml:ro
+    ports:
+      - "3200:3200"   # Tempo query
+      - "4319:4317"   # optional (not used)
+
+  grafana:
+    image: grafana/grafana:11.1.4
+    container_name: workdesklm-grafana
+    environment:
+      - GF_SECURITY_ADMIN_USER=admin
+      - GF_SECURITY_ADMIN_PASSWORD=admin
+    volumes:
+      - ./infra/grafana/provisioning/datasources:/etc/grafana/provisioning/datasources:ro
+      - ./infra/grafana/provisioning/dashboards:/etc/grafana/provisioning/dashboards:ro
+      - ./infra/grafana/dashboards:/var/lib/grafana/dashboards:ro
+    ports:
+      - "3001:3000"
+    depends_on:
+      - prometheus
+      - loki
+      - tempo
 
 volumes:
   qdrant_data:

@@ -24,6 +24,7 @@ from app.schemas.chat import ChatRequest, ChatResponse, Citation, LatencyBreakdo
 from app.core.ollama import generate as ollama_generate, pick_model
 from app.rag.prompt import ContextChunk, build_prompt
 from app.rag.guardrails import should_abstain_from_retrieval, validate_or_abstain
+from app.observability.otel import setup_otel
 
 from fastapi.middleware.cors import CORSMiddleware
 
@@ -35,6 +36,8 @@ app = FastAPI(
     version="0.4.0",
     description="Gen 1: Step 4: embeddings + Qdrant indexing.",
 )
+
+setup_otel(app)
 
 
 app.add_middleware(

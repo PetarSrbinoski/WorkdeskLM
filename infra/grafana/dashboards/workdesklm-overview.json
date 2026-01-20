@@ -1,0 +1,11 @@
+{
+  "id": null,
+  "uid": "workdesklm-overview",
+  "title": "WorkdeskLM Overview",
+  "timezone": "browser",
+  "schemaVersion": 39,
+  "version": 1,
+  "refresh": "5s",
+  "panels": [],
+  "time": { "from": "now-15m", "to": "now" }
+}
