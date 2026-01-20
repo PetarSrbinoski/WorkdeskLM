@@ -90,6 +90,49 @@ def init_db(conn: sqlite3.Connection) -> None:
         """
     )
 
+    # --- Gen 3: sessions/memory ---
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS sessions (
+            id TEXT PRIMARY KEY,
+            title TEXT NOT NULL,
+            created_at TEXT NOT NULL
+        );
+        """
+    )
+
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS session_messages (
+            id TEXT PRIMARY KEY,
+            session_id TEXT NOT NULL,
+            role TEXT NOT NULL CHECK(role IN ('user','assistant')),
+            content TEXT NOT NULL,
+            created_at TEXT NOT NULL,
+            FOREIGN KEY(session_id) REFERENCES sessions(id) ON DELETE CASCADE
+        );
+        """
+    )
+
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS session_summaries (
+            session_id TEXT PRIMARY KEY,
+            summary TEXT NOT NULL,
+            updated_at TEXT NOT NULL,
+            FOREIGN KEY(session_id) REFERENCES sessions(id) ON DELETE CASCADE
+        );
+        """
+    )
+
+    conn.execute(
+        """
+        CREATE INDEX IF NOT EXISTS idx_session_messages_sid
+        ON session_messages(session_id, created_at);
+        """
+    )
+
+
     conn.commit()
 
 
