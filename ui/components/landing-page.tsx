@@ -18,31 +18,19 @@ export function LandingPage({ onStart, darkMode, onToggleDarkMode }: LandingPage
       <div className="absolute inset-0">
         <LightRays
           raysOrigin="top-center"
-          raysColor={darkMode ? '#dc2626' : '#f97316'}
+          raysColor={darkMode ? '#dc2626' : '#ffffff'}
           raysSpeed={0.8}
-          lightSpread={1.5}
-          rayLength={2.5}
-          pulsating={true}
+          lightSpread={1.2}
+          rayLength={2}
+          pulsating={false}
           fadeDistance={1.2}
           saturation={0.9}
           followMouse={false}
           mouseInfluence={0}
-          noiseAmount={0.05}
-          distortion={0.1}
+          noiseAmount={0}
+          distortion={0.0}
           className="w-full h-full"
         />
-      </div>
-
-      {/* Theme Toggle */}
-      <div className="absolute top-6 right-6 z-10">
-        <Button
-          variant="ghost"
-          size="icon"
-          onClick={onToggleDarkMode}
-          className="rounded-full bg-background/50 backdrop-blur-sm border size-10"
-        >
-          {darkMode ? <Sun className="size-5" /> : <Moon className="size-5" />}
-        </Button>
       </div>
 
       {/* Main Content */}

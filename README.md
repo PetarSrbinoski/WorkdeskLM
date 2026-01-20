@@ -1,152 +1,152 @@
-# WorkdeskLM — Local-First NotebookLM-Style RAG System
+# WorkdeskLM - Local-First NotebookLM-Style RAG System
 
-  WorkdeskLM is a fully local, document-grounded AI assistant inspired by Google’s NotebookLM.
-  It runs entirely on a local machine (Windows + Docker + WSL2) and provides citation-grounded
-  answers with strict abstention when information is missing.
+**with Evaluation, Observability, and Product-Grade Features**
 
-  The project is designed as an internship-grade system with realistic infrastructure,
-  clear evaluation hooks, and production-style observability planned in later generations.
+WorkdeskLM is a fully local, production-inspired Retrieval-Augmented Generation (RAG) system designed to replicate and extend the core ideas behind Google's NotebookLM - while running entirely on local hardware.
 
-  ---
+The project emphasizes **measurable quality** and **hallucination control**. It supports document-grounded chat, strict citations, evaluation benchmarks, observability, reranking, and workflow tools such as briefs and flashcards.
 
-  ## Key Features (Gen 1)
+---
 
-  • 100% local-first (no cloud dependencies)
-  • PDF / TXT / Markdown ingestion
-  • Page-aware chunking with overlap
-  • Local embeddings (sentence-transformers)
-  • Vector search with Qdrant
-  • RAG chat with strict citations
-  • “I don’t know” abstention guardrail
-  • Runtime LLM switching:
-      – Fast: phi3:mini
-      – Quality: deepseek-r1-distill-qwen:7b (with fallbacks)
-  • Modern UI (Next.js + Tailwind)
-  • Docker Compose orchestration (Windows-friendly)
+## Key Principles
 
-  ---
+- **Local-first** - no cloud dependencies; all models and data run locally
+- **Grounded answers** - strict citations or explicit abstention
+- **Measured improvement** - each generation includes evaluation results
+- **Product mindset** - sessions, tools, observability, and reliability
 
-  ## Architecture Overview
+---
 
-  [ Architecture diagram image goes here ]
+## My Hardware & Environment
 
-  WorkdeskLM is composed of three main services:
+- OS: Windows (Docker Desktop with WSL2)
+- RAM: 32 GB
+- GPU: NVIDIA RTX 4050 (6 GB VRAM)
+- LLM Runtime: Ollama (host)
+- All services orchestrated via Docker Compose
 
-  • UI (Next.js + Tailwind)
-      – Chat interface
-      – Document upload
-      – Model mode switch (Fast / Quality)
-      – Source inspection panel
+---
 
-  • API (FastAPI)
-      – Ingestion pipeline
-      – Chunking + metadata storage
-      – Embedding generation
-      – Vector indexing & retrieval
-      – RAG orchestration
-      – Ollama integration
-      – Guardrails & abstention logic
+## Architecture Overview
 
-  • Vector Database (Qdrant)
-      – Stores chunk embeddings
-      – Enables semantic retrieval
+WorkdeskLM consists of the following core components:
 
-  All services are orchestrated locally using Docker Compose.
+- **Frontend**: Custom Next.js + Tailwind UI
+- **API**: FastAPI backend
+- **Vector DB**: Qdrant (Docker)
+- **Metadata Store**: SQLite
+- **Embeddings**: sentence-transformers (local)
+- **LLMs**: Ollama (Fast / Quality modes)
+- **Observability**: OpenTelemetry, Prometheus, Grafana, Loki, Tempo
 
-  ---
+The system implements a multi-stage RAG pipeline with reranking, guardrails, session memory, and evaluation hooks.
 
-  ## How RAG Works in WorkdeskLM
+---
 
-  1) A document is uploaded (PDF / TXT / MD)
-  2) The document is parsed into pages
-  3) Pages are chunked with overlap
-  4) Each chunk is embedded locally
-  5) Embeddings are stored in Qdrant
-  6) When a question is asked:
-     – The question is embedded
-     – Top-K chunks are retrieved
-     – If retrieval confidence is low → abstain
-     – Otherwise, a prompt is built using only retrieved chunks
-     – The LLM must cite each claim using document/page/chunk references
+## Model Modes
 
-  If citations are missing or unsupported, the system responds with:
+- **Fast mode**: `phi3:mini`  
+  Optimized for responsiveness and low latency.
 
-  “I don’t know based on the provided documents.”
+- **Quality mode**: `qwen2.5:7b-instruct`  
+  Optimized for reasoning quality, citation correctness, and abstention accuracy.
 
-  ---
+Users can switch modes at runtime.
 
-  ## Local Models
+---
 
-  WorkdeskLM uses Ollama for local LLM execution:
+## Generation 1 - Cited Document Chat (MVP)
 
-  • Fast mode:
-      – phi3:mini
-      – Optimized for responsiveness
+#### Features:
+- PDF / TXT / MD ingestion
+- Chunking with overlap + metadata
+- Local embeddings + Qdrant vector search
+- RAG answers with strict citations
+- Abstention when evidence is insufficient
 
-  • Quality mode:
-      – qwen2.5:7b-instruct
-      – Automatic fallback to:
-          – llama3.1:8b-instruct
+#### Deliverables:
+- Architecture diagram
+- Working local RAG system
+- Demo screenshots
 
-  Model selection happens at runtime via the UI.
+---
 
-  ---
+## Generation 2 - Evaluation & Observability
 
-  ## Running the Project (Windows)
+#### Evaluation:
+- Custom benchmark dataset (40 questions, answerable + unanswerable)
+- Metrics:
+  - Retrieval hit@k
+  - Citation correctness
+  - Answer correctness
+  - Abstention correctness
+  - Latency breakdown
 
-  Requirements:
-  • Windows 10/11
-  • Docker Desktop with WSL2 enabled
-  • Ollama installed on the host
-  • NVIDIA GPU optional (used by Ollama, not required)
+#### Observability:
+- Distributed traces (OpenTelemetry → Tempo)
+- Metrics (Prometheus)
+- Logs (Loki)
+- Dashboards (Grafana)
 
-  Steps:
+#### Example Results (40 questions):
 
-  1) Copy environment variables:
-     cp .env.example .env
+- Fast mode:
+  - retrieval_hit@k: 0.60
+  - answer correctness: 0.63
+  - citation correctness: 0.25
+  - abstention correctness: 0.73
+  - avg latency: ~2.0 s
 
-  2) Pull Ollama models:
-     ollama pull phi3:mini
-     ollama pull deepseek-r1-distill-qwen:7b
+- Quality mode:
+  - retrieval_hit@k: 0.60
+  - answer correctness: 0.88
+  - citation correctness: 0.48
+  - abstention correctness: 1.00
+  - avg latency: ~2.3 s
 
-  3) Start all services:
-     docker compose up -d --build
+Insight: Retrieval - not generation - was the main quality bottleneck.
 
-  4) Open:
-     • UI: http://localhost:3000
-     • API docs: http://localhost:8000/docs
+---
 
-  ---
+## Generation 3 - Product-Grade Features
 
-  ## Generation Plan
+### Improvements:
+- **Two-stage retrieval with reranking** (cross-encoder)
+- **Session memory** with optional summaries
+- **Studio tools**: Document briefs and Flashcard generation
+- Hardened JSON parsing and failure handling
 
-  ### Gen 1 — Cited Document Chat (Current)
-  • Local ingestion + RAG
-  • Strict citations
-  • Abstention guardrails
-  • Next.js UI
+#### Expected impact:
+- Improved retrieval hit@k
+- Higher citation correctness
+- Stronger reliability under real usage
 
-  ### Gen 2 — Evaluation & Observability
-  • Benchmark datasets
-  • Retrieval & citation metrics
-  • Latency analysis
-  • OpenTelemetry + Prometheus + Grafana + Loki
+---
 
-  ### Gen 3 — Product-Grade Features
-  • Reranking
-  • Session memory & summaries
-  • Web / YouTube ingestion
-  • Study tools (briefs, flashcards, topic maps)
+## Why This Project Matters
 
-  ---
+WorkdeskLM demonstrates:
+- Local deployment of modern RAG systems
+- Engineering trade-offs between latency and quality
+- Evaluation-driven iteration
+- Production-style observability and debugging
+- Responsible AI behavior via abstention
 
-  ## Design Philosophy
+This project was built to resemble real-world AI systems rather than demos, and serves as a foundation for further research.
 
-  WorkdeskLM prioritizes:
-  • Correctness over fluency
-  • Explicit provenance over hallucination
-  • Measurable improvements over demos
-  • Local-first engineering
+---
 
-  This repository is intentionally structured to support iteration,
-  evaluation, and extension.
+## Running the Project
+
+1. Start all services:
+   ```bash
+   docker compose up -d --build
+   ```
+2. API:  
+   http://localhost:8000/docs
+
+3. Frontend:  
+   http://localhost:3000
+
+4. Grafana:  
+   http://localhost:3001

@@ -70,9 +70,9 @@ export function Sidebar({
   }
 
   return (
-    <aside className="w-100 border-r bg-sidebar flex flex-col h-full">
+    <aside className="w-100 border-r bg-sidebar flex flex-col h-screen">
       {/* Header with logo and theme toggle */}
-      <div className="p-4 border-b">
+      <div className="p-4 border-b shrink-0">
         <div className="flex items-center justify-between">
           <button
             type="button"
@@ -97,7 +97,7 @@ export function Sidebar({
 
       {/* Sources Button */}
       {onSourcesClick && (
-        <div className="px-4 pt-4">
+        <div className="px-4 pt-4 shrink-0">
           <Button
             variant="outline"
             className="w-full justify-start gap-2 bg-transparent"
@@ -113,23 +113,24 @@ export function Sidebar({
           </Button>
         </div>
       )}
-      
-      <ScrollArea className="flex-1">
+
+      {/* Scrollable content */}
+      <ScrollArea className="flex-1 min-h-0">
         <div className="p-4 space-y-4">
           <HealthStatus />
-          
+
           <div>
             <h2 className="text-xs font-medium text-muted-foreground uppercase tracking-wider mb-3">
               Upload Document
             </h2>
             <FileUpload onUpload={handleUpload} />
           </div>
-          
+
           <div>
             <h2 className="text-xs font-medium text-muted-foreground uppercase tracking-wider mb-3">
               Documents ({documents.length})
             </h2>
-            
+
             {loading ? (
               <div className="space-y-2">
                 <Skeleton className="h-16 w-full" />
@@ -140,13 +141,9 @@ export function Sidebar({
                 No documents yet. Upload one to get started.
               </p>
             ) : (
-              <div className="space-y-2 max-h-96 overflow-y-auto pr-1">
+              <div className="space-y-2 pr-1">
                 {documents.map((doc) => (
-                  <DocumentCard
-                    key={doc.id}
-                    document={doc}
-                    onDelete={handleDelete}
-                  />
+                  <DocumentCard key={doc.id} document={doc} onDelete={handleDelete} />
                 ))}
               </div>
             )}

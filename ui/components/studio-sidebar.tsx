@@ -34,6 +34,10 @@ interface StudioSidebarProps {
   onFlashcardsToChat: (cards: Flashcard[]) => void
 
   onNewSession: () => Promise<void>
+
+  // NEW: disable summarize unless there is chat
+  hasChat: boolean
+
   disabled?: boolean
 }
 
@@ -47,15 +51,18 @@ export function StudioSidebar({
   onSummaryToChat,
   onFlashcardsToChat,
   onNewSession,
+  hasChat,
   disabled = false,
 }: StudioSidebarProps) {
   const [flashcardCount, setFlashcardCount] = useState(8)
   const [loading, setLoading] = useState<null | 'brief' | 'flashcards' | 'summarize' | 'docs' | 'newchat'>(null)
   const [error, setError] = useState<string | null>(null)
 
-  const effectiveDocId = useMemo(() => (selectedDocId === 'all' ? undefined : selectedDocId), [selectedDocId])
+  const effectiveDocId = useMemo(
+    () => (selectedDocId === 'all' ? undefined : selectedDocId),
+    [selectedDocId]
+  )
 
-  // initialize doc selection from localStorage (optional)
   useEffect(() => {
     try {
       const stored = localStorage.getItem(DOC_STORAGE_KEY)
@@ -152,16 +159,13 @@ export function StudioSidebar({
   }
 
   return (
-    <aside className="w-96 border-l bg-sidebar flex flex-col h-full">
+    <aside className="w-92 border-l bg-sidebar flex flex-col h-full">
       <div className="p-4 border-b">
         <div className="flex items-center justify-between">
           <div className="text-left">
             <h2 className="text-sm font-semibold">Studio</h2>
             <p className="text-xs text-muted-foreground">Briefs, flashcards, session summary</p>
           </div>
-          <Badge variant="secondary" className="border-0">
-            {sessionId ? 'active' : 'no session'}
-          </Badge>
         </div>
       </div>
 
@@ -179,12 +183,7 @@ export function StudioSidebar({
           <div className="space-y-2">
             <div className="flex items-center justify-between">
               <Label className="text-xs">Document scope (optional)</Label>
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={refreshDocs}
-                disabled={disabled || loading === 'docs'}
-              >
+              <Button variant="ghost" size="sm" onClick={refreshDocs} disabled={disabled || loading === 'docs'}>
                 {loading === 'docs' ? 'Refreshing…' : 'Refresh'}
               </Button>
             </div>
@@ -258,22 +257,18 @@ export function StudioSidebar({
               variant="outline"
               className="justify-start gap-2"
               onClick={runSummarizeSession}
-              disabled={disabled || loading !== null || !sessionId}
+              disabled={disabled || loading !== null || !sessionId || !hasChat}
             >
               <FileText className="size-4" />
               Summarize session
               {loading === 'summarize' && <span className="ml-auto text-xs text-muted-foreground">Loading…</span>}
             </Button>
 
-            <Button
-              variant="default"
-              className="justify-start gap-2 bg-crimson hover:bg-crimson/90 text-white"
-              onClick={runNewChat}
-              disabled={disabled || loading !== null}
-            >
-              New chat / workspace
-              {loading === 'newchat' && <span className="ml-auto text-xs text-white/80">Loading…</span>}
-            </Button>
+            {!hasChat && (
+              <p className="text-xs text-muted-foreground">
+                Send at least one message to enable session summary.
+              </p>
+            )}
           </div>
         </div>
       </ScrollArea>

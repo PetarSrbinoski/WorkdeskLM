@@ -9,11 +9,7 @@ export function FlashcardsMessage({ cards }: { cards: Flashcard[] }) {
 
   return (
     <>
-      <button
-        type="button"
-        onClick={() => setOpen(true)}
-        className="w-full text-left"
-      >
+      <button type="button" onClick={() => setOpen(true)} className="w-full text-left">
         <div className="text-sm font-medium underline underline-offset-4">
           Click here for flashcards
         </div>
