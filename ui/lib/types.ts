@@ -43,6 +43,7 @@ export interface ChatRequest {
   top_k: number
   min_score: number
   doc_id?: string
+  session_id?: string
 }
 
 export interface Citation {
@@ -70,7 +71,60 @@ export interface ChatResponse {
   latency: Latency
 }
 
+// Studio types
+export interface StudioBriefRequest {
+  doc_id?: string
+  question: string
+  mode: 'quality'
+}
+export interface StudioBriefResponse {
+  brief: string
+}
+
+export interface Flashcard {
+  q: string
+  a: string
+}
+
+export interface StudioFlashcardsRequest {
+  doc_id?: string
+  count: number
+  mode: 'quality'
+}
+export interface StudioFlashcardsResponse {
+  cards: Flashcard[]
+}
+
+// Sessions / workspaces
+export interface CreateSessionRequest {
+  title: string
+}
+export interface CreateSessionResponse {
+  session_id: string
+  title: string
+}
+export type SessionRole = 'user' | 'assistant' | 'system'
+export interface SessionMessage {
+  id: string
+  role: SessionRole
+  content: string
+  created_at: string
+}
+export interface GetSessionResponse {
+  session_id: string
+  title: string
+  created_at: string
+  summary: string | null
+  messages: SessionMessage[]
+}
+export interface SummarizeSessionResponse {
+  session_id: string
+  summary: string
+}
+
 // UI state types
+export type ChatMessageKind = 'text' | 'flashcards'
+
 export interface ChatMessage {
   id: string
   role: 'user' | 'assistant'
@@ -81,4 +135,8 @@ export interface ChatMessage {
   model_used?: string
   mode_used?: string
   abstained?: boolean
+
+  // Gen 3 additions
+  kind?: ChatMessageKind
+  flashcards?: Flashcard[]
 }

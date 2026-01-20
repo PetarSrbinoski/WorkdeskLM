@@ -8,6 +8,7 @@ class ChatRequest(BaseModel):
     top_k: int = Field(default=6, ge=1, le=20)
     min_score: float = Field(default=0.25, ge=0.0, le=1.0)
     doc_id: Optional[str] = None
+    session_id: Optional[str] = None
 
 
 class Citation(BaseModel):
@@ -18,6 +19,7 @@ class Citation(BaseModel):
     page_number: int
     chunk_index: int
     quote: str
+    session_id: Optional[str] = None
 
 
 class LatencyBreakdown(BaseModel):
@@ -25,6 +27,7 @@ class LatencyBreakdown(BaseModel):
     qdrant_ms: int
     llm_ms: int
     total_ms: int
+    session_id: Optional[str] = None
 
 
 class ChatResponse(BaseModel):
@@ -34,3 +37,5 @@ class ChatResponse(BaseModel):
     model_used: str
     citations: List[Citation]
     latency: LatencyBreakdown
+    session_id: Optional[str] = None
+

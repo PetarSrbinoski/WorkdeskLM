@@ -1,44 +1,72 @@
 import asyncio
 import logging
 import time
-
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional, Tuple
 from uuid import uuid4
 
 import httpx
 from fastapi import FastAPI, File, HTTPException, UploadFile
+from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
 from app.core.config import settings
 from app.core.logging import setup_logging
 from app.core.embeddings import embed_texts, embedding_dim
-from app.core.qdrant import ensure_collection, upsert_points, delete_points_by_doc_id, list_collections
+from app.core.qdrant import (
+    ensure_collection,
+    upsert_points,
+    delete_points_by_doc_id,
+    list_collections,
+)
+from app.core.qdrant import search as qdrant_search
+from app.core.ollama import generate as ollama_generate, pick_model
+
+from app.core.rerranker import rerank as rerank_hits  # Gen 3
 from app.db.sqlite import connect, fetch_all, fetch_one, init_db, tx
 from app.ingestion.chunking import chunk_text
 from app.ingestion.parser import parse_file, sha256_bytes
 from app.schemas.ingest import IngestResponse
 from app.schemas.retrieve import RetrieveRequest, RetrieveResponse, RetrievedChunk
-from app.core.qdrant import search as qdrant_search
 from app.schemas.chat import ChatRequest, ChatResponse, Citation, LatencyBreakdown
-from app.core.ollama import generate as ollama_generate, pick_model
 from app.rag.prompt import ContextChunk, build_prompt
 from app.rag.guardrails import should_abstain_from_retrieval, validate_or_abstain
 from app.observability.otel import setup_otel
 
-from fastapi.middleware.cors import CORSMiddleware
+# Gen 3: sessions + studio
+from app.memory.store import (
+    create_session,
+    get_session,
+    add_message,
+    list_messages,
+    get_summary,
+    upsert_summary,
+)
+from app.schemas.session import (
+    CreateSessionRequest,
+    CreateSessionResponse,
+    GetSessionResponse,
+    SessionMessage,
+)
+from app.schemas.studio import (
+    BriefRequest,
+    BriefResponse,
+    FlashcardsRequest,
+    FlashcardsResponse,
+    Flashcard,
+)
+from app.studio.tools import retrieve_context, make_brief, make_flashcards
 
 setup_logging(settings.log_level)
 logger = logging.getLogger("api")
 
 app = FastAPI(
-    title="WorkdeskLM API (Gen 1)",
-    version="0.4.0",
-    description="Gen 1: Step 4: embeddings + Qdrant indexing.",
+    title="WorkdeskLM API",
+    version="0.5.0",
+    description="Gen 3: reranking, sessions/memory, studio tools.",
 )
 
 setup_otel(app)
-
 
 app.add_middleware(
     CORSMiddleware,
@@ -51,8 +79,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-
-DB = None  # set on startup
+DB = None
 
 
 def utc_now_iso() -> str:
@@ -101,7 +128,13 @@ async def check_ollama(client: httpx.AsyncClient) -> Dict[str, Any]:
         "quality_present": settings.quality_model in models if models else False,
     }
 
-    return {"ok": ok, "url": tags_url, "models": models[:50], "expected": expected, "error": err}
+    return {
+        "ok": ok,
+        "url": tags_url,
+        "models": models[:50],
+        "expected": expected,
+        "error": err,
+    }
 
 
 @app.on_event("startup")
@@ -111,7 +144,6 @@ async def _startup() -> None:
     init_db(DB)
     logger.info("sqlite initialized path=%s", settings.sqlite_path)
 
-    # Ensure Qdrant collection exists (Step 4)
     dim = embedding_dim()
     async with httpx.AsyncClient() as client:
         await ensure_collection(client, vector_size=dim)
@@ -135,6 +167,11 @@ async def health() -> JSONResponse:
             "dim": embedding_dim(),
             "collection": settings.qdrant_collection,
         },
+        "gen3": {
+            "enable_rerank": getattr(settings, "enable_rerank", True),
+            "rerank_model": getattr(settings, "rerank_model", "unset"),
+            "rerank_candidates": getattr(settings, "rerank_candidates", 20),
+        },
     }
     code = 200 if status == "ok" else 503
     logger.info("health status=%s qdrant_ok=%s ollama_ok=%s", status, qdrant["ok"], ollama["ok"])
@@ -143,7 +180,7 @@ async def health() -> JSONResponse:
 
 @app.get("/")
 async def root() -> Dict[str, str]:
-    return {"message": "Workdesk API is running. See /docs, /health, /ingest."}
+    return {"message": "WorkdeskLM API is running. See /docs, /health, /ingest."}
 
 
 @app.get("/qdrant/collections")
@@ -152,11 +189,170 @@ async def qdrant_collections() -> Dict[str, Any]:
         return await list_collections(client)
 
 
+# -----------------------------
+# Gen 3: Sessions / Memory
+# -----------------------------
+@app.post("/sessions", response_model=CreateSessionResponse)
+async def api_create_session(req: CreateSessionRequest) -> CreateSessionResponse:
+    sid = create_session(DB, req.title)
+    return CreateSessionResponse(session_id=sid, title=req.title)
+
+
+@app.get("/sessions/{session_id}", response_model=GetSessionResponse)
+async def api_get_session(session_id: str) -> GetSessionResponse:
+    s = get_session(DB, session_id)
+    if not s:
+        raise HTTPException(status_code=404, detail="Session not found")
+
+    msgs = list_messages(DB, session_id, limit=50)
+    summary = get_summary(DB, session_id)
+
+    return GetSessionResponse(
+        session_id=s["id"],
+        title=s["title"],
+        created_at=s["created_at"],
+        summary=summary,
+        messages=[SessionMessage(**m) for m in msgs],
+    )
+
+
+@app.post("/sessions/{session_id}/summarize")
+async def api_summarize_session(session_id: str) -> Dict[str, Any]:
+    s = get_session(DB, session_id)
+    if not s:
+        raise HTTPException(status_code=404, detail="Session not found")
+
+    msgs = list_messages(DB, session_id, limit=50)
+    transcript = "\n".join([f"{m['role'].upper()}: {m['content']}" for m in msgs])[:12000]
+
+    prompt = f"""Summarize this conversation for future context.
+Keep it short (6-10 bullet points), factual, and focused on stable info.
+
+TRANSCRIPT:
+{transcript}
+
+SUMMARY:
+"""
+    async with httpx.AsyncClient() as client:
+        model = await pick_model(client, mode="fast")
+        gen = await ollama_generate(client, model=model, prompt=prompt)
+
+    summary = gen.response.strip()
+    upsert_summary(DB, session_id, summary)
+    return {"session_id": session_id, "summary": summary}
+
+
+# -----------------------------
+# Gen 3: Studio Tools
+# -----------------------------
+@app.post("/studio/brief", response_model=BriefResponse)
+async def api_brief(req: BriefRequest) -> BriefResponse:
+    hits = await retrieve_context(req.question, top_n=20, doc_id=req.doc_id)
+    brief = await make_brief(req.question, req.mode, hits)
+    return BriefResponse(brief=brief)
+
+@app.post("/studio/flashcards_debug")
+async def api_flashcards_debug(req: FlashcardsRequest) -> Dict[str, Any]:
+    hits = await retrieve_context("Create flashcards from this document.", top_n=20, doc_id=req.doc_id)
+
+    # generate raw model output
+    context = ""
+    from app.studio.tools import _context_from_hits  # local helper inside tools.py
+    context = _context_from_hits(hits)
+
+    prompt = f"""Create exactly {req.count} flashcards from the context below.
+Return STRICT JSON with this format:
+{{"cards":[{{"q":"...","a":"..."}}, ...]}}
+Output JSON only.
+
+CONTEXT:
+{context}
+
+JSON:
+"""
+
+    async with httpx.AsyncClient() as client:
+        model = await pick_model(client, mode=req.mode)
+        gen = await ollama_generate(client, model=model, prompt=prompt)
+
+    return {
+        "model_used": gen.model,
+        "raw": gen.response,
+        "context_preview": context[:1200]
+    }
+
+@app.post("/studio/flashcards", response_model=FlashcardsResponse)
+async def api_flashcards(req: FlashcardsRequest) -> FlashcardsResponse:
+    hits = await retrieve_context("Create flashcards from this document.", top_n=20, doc_id=req.doc_id)
+    cards = await make_flashcards(req.count, req.mode, hits)
+    return FlashcardsResponse(cards=[Flashcard(q=c["q"], a=c["a"]) for c in cards])
+
+
+# -----------------------------
+# Gen 1/2/3: Core endpoints
+# -----------------------------
+@app.post("/retrieve", response_model=RetrieveResponse)
+async def retrieve(req: RetrieveRequest) -> RetrieveResponse:
+    """
+    Embed question -> Qdrant vector search -> (Gen 3) optional rerank -> return chunks+scores.
+    """
+    question = req.question.strip()
+    if not question:
+        raise HTTPException(status_code=400, detail="Question is empty")
+
+    qvec = embed_texts([question])[0]
+
+    # Two-stage retrieval
+    enable_rerank = bool(getattr(settings, "enable_rerank", True))
+    rerank_candidates = int(getattr(settings, "rerank_candidates", 20))
+    top_n = rerank_candidates if enable_rerank else req.top_k
+
+    async with httpx.AsyncClient() as client:
+        await ensure_collection(client, vector_size=embedding_dim())
+        raw_hits = await qdrant_search(
+            client,
+            query_vector=qvec,
+            top_k=top_n,
+            doc_id=req.doc_id,
+        )
+
+    if enable_rerank and len(raw_hits) > 1:
+        raw_hits = rerank_hits(question, raw_hits)
+
+    raw_hits = raw_hits[: req.top_k]
+
+    results: List[RetrievedChunk] = []
+    for hit in raw_hits:
+        score = float(hit.get("score", 0.0))
+        if score < req.min_score:
+            continue
+
+        payload = hit.get("payload") or {}
+        results.append(
+            RetrievedChunk(
+                chunk_id=str(hit.get("id")),
+                score=score,
+                doc_id=str(payload.get("doc_id", "")),
+                doc_name=str(payload.get("doc_name", "")),
+                page_number=int(payload.get("page_number", 0) or 0),
+                chunk_index=int(payload.get("chunk_index", 0) or 0),
+                text=str(payload.get("text", "")),
+            )
+        )
+
+    return RetrieveResponse(
+        question=req.question,
+        top_k=req.top_k,
+        min_score=req.min_score,
+        results=results,
+    )
+
 
 @app.post("/chat", response_model=ChatResponse)
 async def chat(req: ChatRequest) -> ChatResponse:
     """
-    Step 6: RAG chat w/ strict citations + abstention + model switch (fast/quality).
+    Gen 3: RAG chat w/ strict citations + abstention + model switch (fast/quality),
+    plus reranking and optional session memory.
     """
     question = req.question.strip()
     if not question:
@@ -164,19 +360,40 @@ async def chat(req: ChatRequest) -> ChatResponse:
 
     t0 = time.perf_counter()
 
+    # Optional: session memory context
+    session_summary = None
+    recent_msgs_txt = ""
+    session_id = getattr(req, "session_id", None)  # backward compatible if schema not updated yet
+    if session_id:
+        s = get_session(DB, session_id)
+        if not s:
+            raise HTTPException(status_code=404, detail="Session not found")
+        session_summary = get_summary(DB, session_id)
+        recent = list_messages(DB, session_id, limit=12)
+        if recent:
+            recent_msgs_txt = "\n".join([f"{m['role'].upper()}: {m['content']}" for m in recent])[:4000]
+
     # 1) Embed question
     t_embed0 = time.perf_counter()
     qvec = embed_texts([question])[0]
     embed_ms = int((time.perf_counter() - t_embed0) * 1000)
 
-    # 2) Retrieve
+    # 2) Retrieve (two-stage)
     t_q0 = time.perf_counter()
+    enable_rerank = bool(getattr(settings, "enable_rerank", True))
+    rerank_candidates = int(getattr(settings, "rerank_candidates", 20))
+    top_n = rerank_candidates if enable_rerank else req.top_k
+
     async with httpx.AsyncClient() as client:
         await ensure_collection(client, vector_size=embedding_dim())
-        raw_hits = await qdrant_search(client, query_vector=qvec, top_k=req.top_k, doc_id=req.doc_id)
+        raw_hits = await qdrant_search(client, query_vector=qvec, top_k=top_n, doc_id=req.doc_id)
     qdrant_ms = int((time.perf_counter() - t_q0) * 1000)
 
-    # Convert hits
+    if enable_rerank and len(raw_hits) > 1:
+        raw_hits = rerank_hits(question, raw_hits)
+
+    raw_hits = raw_hits[: req.top_k]
+
     citations: List[Citation] = []
     context_chunks: List[ContextChunk] = []
 
@@ -189,6 +406,12 @@ async def chat(req: ChatRequest) -> ChatResponse:
     # Abstain early if retrieval is weak
     if not raw_hits or should_abstain_from_retrieval(best_score, req.min_score):
         total_ms = int((time.perf_counter() - t0) * 1000)
+
+        # Store messages if session_id provided
+        if session_id:
+            add_message(DB, session_id, "user", question)
+            add_message(DB, session_id, "assistant", "I don't know based on the provided documents.")
+
         return ChatResponse(
             answer="I don't know based on the provided documents.",
             abstained=True,
@@ -226,8 +449,15 @@ async def chat(req: ChatRequest) -> ChatResponse:
             )
         )
 
-    # 3) Build prompt
-    prompt = build_prompt(question=question, chunks=context_chunks)
+    # 3) Build prompt (with optional session memory)
+    base_prompt = build_prompt(question=question, chunks=context_chunks)
+    memory_block = ""
+    if session_summary:
+        memory_block += f"\n\nSESSION SUMMARY (for context, still must cite docs for claims):\n{session_summary}\n"
+    if recent_msgs_txt:
+        memory_block += f"\n\nRECENT CONVERSATION:\n{recent_msgs_txt}\n"
+
+    prompt = base_prompt.replace("ANSWER:\n", f"{memory_block}\nANSWER:\n")
 
     # 4) Pick model + generate with Ollama
     t_llm0 = time.perf_counter()
@@ -238,11 +468,8 @@ async def chat(req: ChatRequest) -> ChatResponse:
             answer_raw = gen.response
             model_used = gen.model
         except Exception as e:
-            # If quality model fails, try fallbacks automatically via pick_model order is already applied,
-            # but failures can be runtime too. We'll do a second pass for quality mode.
             if req.mode.lower().strip() == "quality":
-                from app.core.config import settings as _s
-                fallback_list = [m.strip() for m in _s.quality_fallback_models.split(",") if m.strip()]
+                fallback_list = [m.strip() for m in settings.quality_fallback_models.split(",") if m.strip()]
                 last_err = str(e)
                 answer_raw = ""
                 model_used = model
@@ -267,6 +494,11 @@ async def chat(req: ChatRequest) -> ChatResponse:
 
     total_ms = int((time.perf_counter() - t0) * 1000)
 
+    # Store messages if session_id provided
+    if session_id:
+        add_message(DB, session_id, "user", question)
+        add_message(DB, session_id, "assistant", answer)
+
     return ChatResponse(
         answer=answer,
         abstained=abstained,
@@ -276,58 +508,11 @@ async def chat(req: ChatRequest) -> ChatResponse:
         latency=LatencyBreakdown(embed_ms=embed_ms, qdrant_ms=qdrant_ms, llm_ms=llm_ms, total_ms=total_ms),
     )
 
-@app.post("/retrieve", response_model=RetrieveResponse)
-async def retrieve(req: RetrieveRequest) -> RetrieveResponse:
-    """
-    Step 5: Embed question -> Qdrant vector search -> return chunks+scores.
-    """
-    question = req.question.strip()
-    if not question:
-        raise HTTPException(status_code=400, detail="Question is empty")
-
-    # Embed query
-    qvec = embed_texts([question])[0]
-
-    async with httpx.AsyncClient() as client:
-        await ensure_collection(client, vector_size=embedding_dim())
-        raw_hits = await qdrant_search(
-            client,
-            query_vector=qvec,
-            top_k=req.top_k,
-            doc_id=req.doc_id,
-        )
-
-    results: List[RetrievedChunk] = []
-    for hit in raw_hits:
-        score = float(hit.get("score", 0.0))
-        if score < req.min_score:
-            continue
-
-        payload = hit.get("payload") or {}
-        results.append(
-            RetrievedChunk(
-                chunk_id=str(hit.get("id")),
-                score=score,
-                doc_id=str(payload.get("doc_id", "")),
-                doc_name=str(payload.get("doc_name", "")),
-                page_number=int(payload.get("page_number", 0) or 0),
-                chunk_index=int(payload.get("chunk_index", 0) or 0),
-                text=str(payload.get("text", "")),
-            )
-        )
-
-    return RetrieveResponse(
-        question=req.question,
-        top_k=req.top_k,
-        min_score=req.min_score,
-        results=results,
-    )
-
 
 @app.post("/ingest", response_model=IngestResponse)
 async def ingest(file: UploadFile = File(...)) -> IngestResponse:
     """
-    Step 4: Upload -> parse pages -> chunk -> store SQLite -> embed chunks -> upsert Qdrant.
+    Upload -> parse pages -> chunk -> store SQLite -> embed chunks -> upsert Qdrant.
     Dedupe by sha256.
     """
     if not file.filename:
@@ -363,7 +548,6 @@ async def ingest(file: UploadFile = File(...)) -> IngestResponse:
     chunk_size = 900
     overlap = 150
 
-    # Build chunk records in memory first so we can embed and upsert
     chunk_rows: List[Dict[str, Any]] = []
     for p in pages:
         chunks = chunk_text(p.text, chunk_size=chunk_size, overlap=overlap)
@@ -383,7 +567,6 @@ async def ingest(file: UploadFile = File(...)) -> IngestResponse:
 
     total_chunks = len(chunk_rows)
 
-    # Store SQLite (docs + pages + chunks)
     with tx(DB):
         DB.execute(
             """
@@ -420,7 +603,6 @@ async def ingest(file: UploadFile = File(...)) -> IngestResponse:
                 ),
             )
 
-    # Embed + upsert to Qdrant
     texts = [r["text"] for r in chunk_rows]
     vectors = embed_texts(texts)
     if len(vectors) != len(chunk_rows):
@@ -430,7 +612,7 @@ async def ingest(file: UploadFile = File(...)) -> IngestResponse:
     for row, vec in zip(chunk_rows, vectors):
         points.append(
             {
-                "id": row["id"],  # same as SQLite chunk id
+                "id": row["id"],
                 "vector": vec,
                 "payload": {
                     "doc_id": doc_id,
@@ -521,13 +703,12 @@ async def list_chunks(doc_id: str, limit: int = 20, page: Optional[int] = None) 
 @app.delete("/documents/{doc_id}")
 async def delete_document(doc_id: str) -> Dict[str, Any]:
     """
-    Step 4: Delete document from SQLite + delete Qdrant vectors.
+    Delete document from SQLite + delete Qdrant vectors.
     """
     existing = fetch_one(DB, "SELECT id, name FROM documents WHERE id = ?", (doc_id,))
     if not existing:
         raise HTTPException(status_code=404, detail="Document not found")
 
-    # Delete vectors first (best-effort). If Qdrant is down, don't leave SQLite deleted silently.
     async with httpx.AsyncClient() as client:
         try:
             await ensure_collection(client, vector_size=embedding_dim())

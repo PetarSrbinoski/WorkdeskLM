@@ -1,4 +1,4 @@
-  # WorkdeskLM — Local-First NotebookLM-Style RAG System
+# WorkdeskLM — Local-First NotebookLM-Style RAG System
 
   WorkdeskLM is a fully local, document-grounded AI assistant inspired by Google’s NotebookLM.
   It runs entirely on a local machine (Windows + Docker + WSL2) and provides citation-grounded

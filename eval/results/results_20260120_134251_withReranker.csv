@@ -1,0 +1,81 @@
+id,mode,question,answerable,retrieval_hit@k,abstained,abstain_correct,citation_correct,answer_contains_gold,latency_total_ms,latency_embed_ms,latency_qdrant_ms,latency_llm_ms,model_used
+q1,fast,What is Macedonia's approximate land area in square miles?,True,1,False,True,1,True,5265,12,14,3038,phi3:mini
+q2,fast,What is Macedonia's approximate land area in square kilometers?,True,1,False,True,1,True,3834,9,11,1697,phi3:mini
+q3,fast,What is the major river that runs through Skopje and bisects the country?,True,1,True,False,0,False,5059,10,13,2658,phi3:mini
+q4,fast,Name at least one of the scenic lakes along Macedonia's western or southern borders mentioned in the document.,True,1,False,True,1,True,3915,15,13,1718,phi3:mini
+q5,fast,What is the average summer temperature stated for Macedonia?,True,1,False,True,0,True,3865,12,16,1600,phi3:mini
+q6,fast,What winter temperature is mentioned (that it 'plummets to')?,True,1,False,True,0,True,3927,10,12,1589,phi3:mini
+q7,fast,"Around what year did Macedonia declare independence from Yugoslavia, according to the text?",True,0,False,True,0,False,3684,11,12,1631,phi3:mini
+q8,fast,What name was the country admitted to the United Nations as in 1993?,True,0,True,False,0,False,3290,11,12,977,phi3:mini
+q9,fast,What was signed in August 2001 to address conflict involving the NLA?,True,1,True,False,0,False,4411,10,14,2067,phi3:mini
+q10,fast,In what year did Macedonia officially become a candidate for European Union membership?,True,1,False,True,0,True,5025,12,16,2639,phi3:mini
+q11,fast,What is the approximate population of Macedonia mentioned in the document?,True,0,False,True,0,True,4335,12,12,2036,phi3:mini
+q12,fast,Which language is described as the nation's official language?,True,0,False,True,0,True,3578,10,14,1257,phi3:mini
+q13,fast,"What alphabet does Macedonian use, according to the text?",True,0,True,False,0,False,4310,10,12,2147,phi3:mini
+q14,fast,What percentage threshold in a municipality triggers use of a minority language as an official language alongside Macedonian?,True,0,True,False,0,False,4376,13,15,2001,phi3:mini
+q15,fast,"What are the three daily meals called in Macedonian (breakfast, lunch, dinner)?",True,1,False,True,0,True,7759,11,15,5460,phi3:mini
+q16,fast,Around what times are lunch and dinner typically eaten (as stated)?,True,0,False,True,0,True,4497,10,12,2063,phi3:mini
+q17,fast,What is rakija described as in the visiting section?,True,0,False,True,0,True,4240,10,11,2228,phi3:mini
+q18,fast,What is the name of the popular circle dance mentioned for celebrations and weddings?,True,1,False,True,1,True,3482,13,12,1421,phi3:mini
+q19,fast,What is the currency of Macedonia mentioned in the economy section?,True,0,False,True,0,True,4321,10,11,2235,phi3:mini
+q20,fast,What is the voting age stated in the government section?,True,1,False,True,0,True,3799,11,15,1679,phi3:mini
+q21,fast,What does 'Advance' mean in the fencing glossary?,True,1,False,True,1,True,4107,10,11,1959,phi3:mini
+q22,fast,"In foil and sabre, what does the first attacker acquire?",True,1,False,True,0,False,4805,10,11,2677,phi3:mini
+q23,fast,What is a 'Balestra' described as?,True,1,False,True,0,False,4594,9,14,2622,phi3:mini
+q24,fast,Which weapon is described as the heaviest of the three fencing weapons?,True,0,False,True,0,True,3568,11,11,1402,phi3:mini
+q25,fast,What is the 'piste/strip' length given in the document?,True,1,False,True,1,True,3437,11,11,1277,phi3:mini
+q26,fast,"How far apart do fencers typically begin after each touch, according to the piste description?",True,1,False,True,1,True,4185,11,11,1951,phi3:mini
+q27,fast,What does 'Lame' refer to (and how is it pronounced)?,True,1,True,False,0,False,3902,10,11,1812,phi3:mini
+q28,fast,What are the basic gear items listed as needed to get started?,True,0,False,True,0,True,4045,11,14,1995,phi3:mini
+q29,fast,What are the three essential skills of fencing named in the overview of basic skills?,True,1,True,False,0,False,3195,11,11,1068,phi3:mini
+q30,fast,"In foil, what is the valid target area described as?",True,0,False,True,0,True,3701,11,11,1554,phi3:mini
+q31,fast,Which weapon has the entire body as the valid target area and has no right-of-way rule?,True,0,False,True,0,True,4209,12,11,1971,phi3:mini
+q32,fast,"In épée, what happens if both fencers hit within 1/25th of a second?",True,1,True,False,0,False,3730,11,11,1537,phi3:mini
+q33,fast,"For sabre, what is the valid target area described as (in the historical overview)?",True,0,False,True,0,True,4223,12,17,2051,phi3:mini
+q34,fast,What is the penalty meaning of a yellow card in the penalties section?,True,0,False,True,0,True,4501,12,12,2304,phi3:mini
+q35,fast,"What does a black card result in, according to the penalties section?",True,1,False,True,0,False,4731,13,12,2548,phi3:mini
+q36,fast,"According to the history section, what were dogs originally?",True,1,False,True,1,True,3964,13,16,1425,phi3:mini
+q37,fast,"Where did dogs originate, according to the document?",True,1,False,True,1,True,4720,15,10,2245,phi3:mini
+q38,fast,About how many different dog breeds are stated to exist worldwide?,True,1,False,True,1,True,3622,10,12,1033,phi3:mini
+q39,fast,What does the document say dogs' current habitats are?,True,1,False,True,1,True,4687,10,19,2147,phi3:mini
+q40,fast,What is the average lifespan of a dog stated in the fun facts?,True,1,False,True,1,True,4062,11,12,1407,phi3:mini
+q1,quality,What is Macedonia's approximate land area in square miles?,True,1,False,True,1,True,8238,12,14,5920,qwen2.5:7b-instruct
+q2,quality,What is Macedonia's approximate land area in square kilometers?,True,1,False,True,0,True,5195,12,16,2516,qwen2.5:7b-instruct
+q3,quality,What is the major river that runs through Skopje and bisects the country?,True,1,False,True,1,True,4815,12,12,2629,qwen2.5:7b-instruct
+q4,quality,Name at least one of the scenic lakes along Macedonia's western or southern borders mentioned in the document.,True,1,False,True,1,True,5716,19,17,2462,qwen2.5:7b-instruct
+q5,quality,What is the average summer temperature stated for Macedonia?,True,1,False,True,1,True,5633,21,20,2546,qwen2.5:7b-instruct
+q6,quality,What winter temperature is mentioned (that it 'plummets to')?,True,1,False,True,0,True,5322,20,16,2277,qwen2.5:7b-instruct
+q7,quality,"Around what year did Macedonia declare independence from Yugoslavia, according to the text?",True,0,False,True,0,True,4523,18,20,2204,qwen2.5:7b-instruct
+q8,quality,What name was the country admitted to the United Nations as in 1993?,True,0,False,True,0,True,4623,10,11,2468,qwen2.5:7b-instruct
+q9,quality,What was signed in August 2001 to address conflict involving the NLA?,True,1,False,True,1,True,4411,12,12,2238,qwen2.5:7b-instruct
+q10,quality,In what year did Macedonia officially become a candidate for European Union membership?,True,1,False,True,0,True,4471,11,16,2312,qwen2.5:7b-instruct
+q11,quality,What is the approximate population of Macedonia mentioned in the document?,True,0,False,True,0,True,4434,13,12,2304,qwen2.5:7b-instruct
+q12,quality,Which language is described as the nation's official language?,True,0,False,True,0,True,4507,11,12,2360,qwen2.5:7b-instruct
+q13,quality,"What alphabet does Macedonian use, according to the text?",True,0,False,True,0,True,4026,9,14,2035,qwen2.5:7b-instruct
+q14,quality,What percentage threshold in a municipality triggers use of a minority language as an official language alongside Macedonian?,True,0,False,True,0,True,5250,13,11,3041,qwen2.5:7b-instruct
+q15,quality,"What are the three daily meals called in Macedonian (breakfast, lunch, dinner)?",True,1,False,True,0,True,4727,13,13,2683,qwen2.5:7b-instruct
+q16,quality,Around what times are lunch and dinner typically eaten (as stated)?,True,0,False,True,0,True,4479,10,15,2296,qwen2.5:7b-instruct
+q17,quality,What is rakija described as in the visiting section?,True,0,False,True,0,True,4400,17,16,2425,qwen2.5:7b-instruct
+q18,quality,What is the name of the popular circle dance mentioned for celebrations and weddings?,True,1,False,True,0,True,4353,12,12,2328,qwen2.5:7b-instruct
+q19,quality,What is the currency of Macedonia mentioned in the economy section?,True,0,False,True,0,True,4543,10,16,2402,qwen2.5:7b-instruct
+q20,quality,What is the voting age stated in the government section?,True,1,False,True,1,True,4317,9,10,2203,qwen2.5:7b-instruct
+q21,quality,What does 'Advance' mean in the fencing glossary?,True,1,False,True,1,True,4411,13,12,2195,qwen2.5:7b-instruct
+q22,quality,"In foil and sabre, what does the first attacker acquire?",True,1,False,True,1,True,4640,10,17,2324,qwen2.5:7b-instruct
+q23,quality,What is a 'Balestra' described as?,True,1,False,True,1,True,5229,11,12,3066,qwen2.5:7b-instruct
+q24,quality,Which weapon is described as the heaviest of the three fencing weapons?,True,0,False,True,0,True,4696,10,14,2294,qwen2.5:7b-instruct
+q25,quality,What is the 'piste/strip' length given in the document?,True,1,False,True,1,True,4705,12,12,2289,qwen2.5:7b-instruct
+q26,quality,"How far apart do fencers typically begin after each touch, according to the piste description?",True,1,False,True,1,True,5199,14,12,2978,qwen2.5:7b-instruct
+q27,quality,What does 'Lame' refer to (and how is it pronounced)?,True,1,False,True,1,True,4968,12,12,2822,qwen2.5:7b-instruct
+q28,quality,What are the basic gear items listed as needed to get started?,True,0,False,True,0,True,4803,11,11,2645,qwen2.5:7b-instruct
+q29,quality,What are the three essential skills of fencing named in the overview of basic skills?,True,1,False,True,0,True,4708,11,19,2530,qwen2.5:7b-instruct
+q30,quality,"In foil, what is the valid target area described as?",True,0,False,True,0,True,5042,11,13,2786,qwen2.5:7b-instruct
+q31,quality,Which weapon has the entire body as the valid target area and has no right-of-way rule?,True,0,False,True,0,True,5168,16,13,2829,qwen2.5:7b-instruct
+q32,quality,"In épée, what happens if both fencers hit within 1/25th of a second?",True,1,False,True,1,True,4987,13,11,2787,qwen2.5:7b-instruct
+q33,quality,"For sabre, what is the valid target area described as (in the historical overview)?",True,0,False,True,0,True,4928,13,12,2746,qwen2.5:7b-instruct
+q34,quality,What is the penalty meaning of a yellow card in the penalties section?,True,0,False,True,0,True,5560,10,11,3199,qwen2.5:7b-instruct
+q35,quality,"What does a black card result in, according to the penalties section?",True,1,False,True,1,True,4551,10,16,2371,qwen2.5:7b-instruct
+q36,quality,"According to the history section, what were dogs originally?",True,1,False,True,1,True,4191,10,12,1784,qwen2.5:7b-instruct
+q37,quality,"Where did dogs originate, according to the document?",True,1,False,True,1,True,4400,11,11,1951,qwen2.5:7b-instruct
+q38,quality,About how many different dog breeds are stated to exist worldwide?,True,1,False,True,1,True,4229,11,18,1813,qwen2.5:7b-instruct
+q39,quality,What does the document say dogs' current habitats are?,True,1,False,True,1,True,5100,17,17,2457,qwen2.5:7b-instruct
+q40,quality,What is the average lifespan of a dog stated in the fun facts?,True,1,False,True,1,True,4575,16,16,1975,qwen2.5:7b-instruct

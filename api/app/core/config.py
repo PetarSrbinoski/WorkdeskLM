@@ -22,5 +22,9 @@ class Settings(BaseSettings):
     embedding_model: str = "BAAI/bge-small-en-v1.5"
     embedding_batch_size: int = 32
 
+    enable_rerank: bool = True
+    rerank_model: str = "BAAI/bge-reranker-base"
+    rerank_candidates: int = 20  # qdrant fetch N, rerank top N -> return top_k
+
 
 settings = Settings()
