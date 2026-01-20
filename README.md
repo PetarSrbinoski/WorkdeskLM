@@ -151,10 +151,19 @@ for windows:
    ollama pull qwen2.5:7b-instruct
    ```
 
-for unix:
+for linux:
 
  ```bash
    curl -fsSL https://ollama.com/install.sh | sh
+   ollama serve
+   ollama pull phi3:mini
+   ollama pull qwen2.5:7b-instruct
+   ```
+
+for macOS:
+ ```bash
+   brew install ollama
+   ollama serve
    ollama pull phi3:mini
    ollama pull qwen2.5:7b-instruct
    ```
