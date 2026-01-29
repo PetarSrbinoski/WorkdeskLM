@@ -545,7 +545,7 @@ async def ingest(file: UploadFile = File(...)) -> IngestResponse:
     doc_id = str(uuid4())
     now = utc_now_iso()
 
-    chunk_size = 900
+    chunk_size = 1200
     overlap = 150
 
     chunk_rows: List[Dict[str, Any]] = []
