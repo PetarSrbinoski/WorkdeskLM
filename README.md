@@ -141,14 +141,14 @@ This project was built to resemble real-world AI systems rather than demos, and 
 ## Running the Project
 
 #### Before you start make sure you have Ollama installed with the models: 
-`phi3:mini` and `qwen2.5:7b-instruct`
+`phi3:mini` and ` qwen2.5:32b`
 
 for windows:
 
  ```bash
    winget install Ollama.Ollama
    ollama pull phi3:mini
-   ollama pull qwen2.5:7b-instruct
+   ollama pull qwen2.5:32b
    ```
 
 for linux:
@@ -157,7 +157,7 @@ for linux:
    curl -fsSL https://ollama.com/install.sh | sh
    ollama serve
    ollama pull phi3:mini
-   ollama pull qwen2.5:7b-instruct
+   ollama pull qwen2.5:32b
    ```
 
 for macOS:
@@ -165,7 +165,7 @@ for macOS:
    brew install ollama
    ollama serve
    ollama pull phi3:mini
-   ollama pull qwen2.5:7b-instruct
+   ollama pull qwen2.5:32b
    ```
 
 After installing make sure its running. 
