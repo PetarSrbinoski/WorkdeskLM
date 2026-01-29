@@ -50,7 +50,7 @@ The system implements a multi-stage RAG pipeline with reranking, guardrails, ses
 - **Fast mode**: `phi3:mini`  
   Optimized for responsiveness and low latency.
 
-- **Quality mode**: `qwen2.5:7b-instruct`  
+- **Quality mode**: `qwen2.5:32b`  
   Optimized for reasoning quality, citation correctness, and abstention accuracy.
 
 Users can switch modes at runtime.
