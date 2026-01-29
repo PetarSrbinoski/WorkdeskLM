@@ -57,7 +57,7 @@ Users can switch modes at runtime.
 
 ---
 
-## Generation 1 - Cited Document Chat (MVP)
+## Generation 1 - Cited Document Chat 
 
 #### Features:
 - PDF / TXT / MD ingestion
@@ -110,7 +110,7 @@ Insight: Retrieval - not generation - was the main quality bottleneck.
 
 ---
 
-## Generation 3 - Product-Grade Features
+## Generation 3 - Workflow Features
 
 ### Improvements:
 - **Two-stage retrieval with reranking** (cross-encoder)
@@ -139,6 +139,36 @@ This project was built to resemble real-world AI systems rather than demos, and 
 ---
 
 ## Running the Project
+
+#### Before you start make sure you have Ollama installed with the models: 
+`phi3:mini` and `qwen2.5:7b-instruct`
+
+for windows:
+
+ ```bash
+   winget install Ollama.Ollama
+   ollama pull phi3:mini
+   ollama pull qwen2.5:7b-instruct
+   ```
+
+for linux:
+
+ ```bash
+   curl -fsSL https://ollama.com/install.sh | sh
+   ollama serve
+   ollama pull phi3:mini
+   ollama pull qwen2.5:7b-instruct
+   ```
+
+for macOS:
+ ```bash
+   brew install ollama
+   ollama serve
+   ollama pull phi3:mini
+   ollama pull qwen2.5:7b-instruct
+   ```
+
+After installing make sure its running. 
 
 1. Start all services:
    ```bash
