@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import logging
 from typing import Any, Dict, List, Optional
+from dataclasses import dataclass
 
 import httpx
 
@@ -9,7 +10,7 @@ from app.core.config import settings
 
 logger = logging.getLogger("ollama")
 
-
+@dataclass(frozen=True)
 class OllamaGenerateResult:
     model: str
     response: str

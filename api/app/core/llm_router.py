@@ -20,7 +20,7 @@ async def pick_model(client: httpx.AsyncClient, mode: str) -> str:
     mode = mode or "fast"
 
     if settings.llm_provider == "nvidia":
-        return settings.nvidia_quality_model
+        return settings.nvidia_quality_model if mode =="quality" else settings.nvidia_fast_model
 
     return await pick_ollama_model(client, mode=mode)
 
