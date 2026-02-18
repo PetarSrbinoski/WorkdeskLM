@@ -18,109 +18,155 @@ import { apiBase } from './apiBase'
 const API_BASE = apiBase()
 
 class ApiError extends Error {
-  constructor(public status: number, message: string) {
+  status: number
+  body?: string
+
+  constructor(status: number, message: string, body?: string) {
     super(message)
     this.name = 'ApiError'
+    this.status = status
+    this.body = body
   }
 }
 
-async function handleResponse<T>(response: Response): Promise<T> {
-  if (!response.ok) {
-    const text = await response.text()
-    throw new ApiError(response.status, text || `HTTP error ${response.status}`)
+/**
+ * Safe text read (never throws).
+ */
+async function safeReadText(res: Response): Promise<string> {
+  try {
+    return await res.text()
+  } catch {
+    return ''
   }
-  return response.json()
 }
+
+/**
+ * Robust request helper:
+ * - Catches network errors (fetch throws) and wraps them in ApiError(status=0)
+ * - Handles non-2xx with readable body
+ * - Handles empty responses
+ * - Handles non-JSON responses cleanly
+ */
+async function request<T>(
+  path: string,
+  init?: RequestInit,
+  opts?: { expectJson?: boolean }
+): Promise<T> {
+  const url = `${API_BASE}${path}`
+  let response: Response
+
+  try {
+    response = await fetch(url, init)
+  } catch (e) {
+    // Network error: API down, DNS, CORS, mixed content, etc.
+    throw new ApiError(0, `Network error calling ${path}: ${String(e)}`)
+  }
+
+  if (!response.ok) {
+    const text = await safeReadText(response)
+    const msg =
+      text?.trim() ||
+      `HTTP error ${response.status} ${response.statusText || ''}`.trim()
+    throw new ApiError(response.status, msg, text)
+  }
+
+  // If caller doesn't want JSON, just return empty object or text if needed later.
+  const expectJson = opts?.expectJson ?? true
+  if (!expectJson) return undefined as unknown as T
+
+  // Some endpoints might return empty body; avoid json() throwing.
+  const text = await safeReadText(response)
+  if (!text) return {} as T
+
+  try {
+    return JSON.parse(text) as T
+  } catch {
+    throw new ApiError(
+      response.status,
+      `Invalid JSON from ${path}`,
+      text.slice(0, 2000)
+    )
+  }
+}
+
+// --------------------
+// API calls
+// --------------------
 
 export async function getHealth(): Promise<HealthResponse> {
-  const response = await fetch(`${API_BASE}/health`)
-  return handleResponse<HealthResponse>(response)
+  return request<HealthResponse>('/health')
 }
 
 export async function getDocuments(): Promise<DocumentsResponse> {
-  const response = await fetch(`${API_BASE}/documents`)
-  return handleResponse<DocumentsResponse>(response)
+  return request<DocumentsResponse>('/documents')
 }
 
 export async function ingestDocument(file: File): Promise<IngestResponse> {
   const formData = new FormData()
   formData.append('file', file)
 
-  const response = await fetch(`${API_BASE}/ingest`, {
+  return request<IngestResponse>('/ingest', {
     method: 'POST',
     body: formData,
   })
-  return handleResponse<IngestResponse>(response)
 }
 
 export async function deleteDocument(docId: string): Promise<void> {
-  const response = await fetch(`${API_BASE}/documents/${docId}`, {
-    method: 'DELETE',
-  })
-  if (!response.ok) {
-    const text = await response.text()
-    throw new ApiError(response.status, text || `HTTP error ${response.status}`)
-  }
+  await request<void>(`/documents/${docId}`, { method: 'DELETE' }, { expectJson: false })
 }
 
-export async function chat(request: ChatRequest): Promise<ChatResponse> {
-  const response = await fetch(`${API_BASE}/chat`, {
+export async function chat(body: ChatRequest): Promise<ChatResponse> {
+  return request<ChatResponse>('/chat', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(request),
+    body: JSON.stringify(body),
   })
-  return handleResponse<ChatResponse>(response)
 }
 
 // Sessions
 export async function createSession(
   body: CreateSessionRequest
 ): Promise<CreateSessionResponse> {
-  const response = await fetch(`${API_BASE}/sessions`, {
+  return request<CreateSessionResponse>('/sessions', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(body),
   })
-  return handleResponse<CreateSessionResponse>(response)
 }
 
 export async function getSession(sessionId: string): Promise<GetSessionResponse> {
-  const response = await fetch(`${API_BASE}/sessions/${sessionId}`)
-  return handleResponse<GetSessionResponse>(response)
+  return request<GetSessionResponse>(`/sessions/${sessionId}`)
 }
 
 export async function summarizeSession(
   sessionId: string
 ): Promise<SummarizeSessionResponse> {
-  const response = await fetch(`${API_BASE}/sessions/${sessionId}/summarize`, {
+  return request<SummarizeSessionResponse>(`/sessions/${sessionId}/summarize`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({}),
   })
-  return handleResponse<SummarizeSessionResponse>(response)
 }
 
 // Studio
 export async function studioBrief(
   body: StudioBriefRequest
 ): Promise<StudioBriefResponse> {
-  const response = await fetch(`${API_BASE}/studio/brief`, {
+  return request<StudioBriefResponse>('/studio/brief', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(body),
   })
-  return handleResponse<StudioBriefResponse>(response)
 }
 
 export async function studioFlashcards(
   body: StudioFlashcardsRequest
 ): Promise<StudioFlashcardsResponse> {
-  const response = await fetch(`${API_BASE}/studio/flashcards`, {
+  return request<StudioFlashcardsResponse>('/studio/flashcards', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(body),
   })
-  return handleResponse<StudioFlashcardsResponse>(response)
 }
 
 export { ApiError }

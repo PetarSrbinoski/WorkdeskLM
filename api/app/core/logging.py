@@ -22,6 +22,5 @@ def setup_logging(level: str = "INFO") -> None:
     )
     handler.setFormatter(formatter)
 
-    # Clear existing handlers to avoid duplicate logs in reloads
     root.handlers.clear()
     root.addHandler(handler)

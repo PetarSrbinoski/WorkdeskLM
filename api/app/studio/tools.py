@@ -5,10 +5,10 @@ from typing import Any, Dict, List, Optional
 
 import httpx
 
-from app.core.config import settings
-from app.core.embeddings import embed_texts, embedding_dim
-from app.core.qdrant import ensure_collection, search as qdrant_search
-from app.core.ollama import pick_model, generate as ollama_generate
+from  app.core.config import settings
+from  app.core.embeddings import embed_texts, embedding_dim
+from  app.core.qdrant import ensure_collection, search as qdrant_search
+from  app.core.ollama import pick_model, generate as ollama_generate
 
 
 def _context_from_hits(hits: List[Dict[str, Any]], max_chars: int = 8000) -> str:
@@ -28,11 +28,15 @@ def _context_from_hits(hits: List[Dict[str, Any]], max_chars: int = 8000) -> str
     return "\n\n---\n\n".join(parts)
 
 
-async def retrieve_context(question: str, top_n: int = 20, doc_id: Optional[str] = None) -> List[Dict[str, Any]]:
+async def retrieve_context(
+    question: str, top_n: int = 20, doc_id: Optional[str] = None
+) -> List[Dict[str, Any]]:
     qvec = embed_texts([question])[0]
     async with httpx.AsyncClient() as client:
         await ensure_collection(client, vector_size=embedding_dim())
-        hits = await qdrant_search(client, query_vector=qvec, top_k=top_n, doc_id=doc_id)
+        hits = await qdrant_search(
+            client, query_vector=qvec, top_k=top_n, doc_id=doc_id
+        )
     return hits
 
 
@@ -56,7 +60,9 @@ BRIEF:
     return gen.response.strip()
 
 
-async def make_flashcards(count: int, mode: str, hits: List[Dict[str, Any]]) -> List[Dict[str, str]]:
+async def make_flashcards(
+    count: int, mode: str, hits: List[Dict[str, Any]]
+) -> List[Dict[str, str]]:
     context = _context_from_hits(hits)
     prompt = f"""Create exactly {count} flashcards from the context below.
     Do NOT use markdown code fences.
@@ -72,11 +78,8 @@ JSON:
         model = await pick_model(client, mode=mode)
         gen = await ollama_generate(client, model=model, prompt=prompt)
 
-    text = gen.response.strip()
-    # best-effort JSON parse
     raw = (gen.response or "").strip()
 
-    # --- robust JSON extraction (handles ```json fences + extra text) ---
     def strip_fences(s: str) -> str:
         if "```" not in s:
             return s
@@ -97,7 +100,7 @@ JSON:
         end = s.rfind("}")
         if start == -1 or end == -1 or end <= start:
             return ""
-        return s[start: end + 1].strip()
+        return s[start : end + 1].strip()
 
     json_str = extract_json_object(raw)
     if not json_str:
@@ -116,4 +119,3 @@ JSON:
         return out[:count]
     except Exception:
         return []
-

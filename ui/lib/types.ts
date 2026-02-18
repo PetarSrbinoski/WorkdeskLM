@@ -3,7 +3,7 @@ export interface HealthResponse {
   status: string
   services: {
     qdrant: { ok: boolean; error?: string }
-    ollama: { ok: boolean; error?: string }
+    llm: { ok: boolean; error?: string }
   }
   embedding: {
     model: string

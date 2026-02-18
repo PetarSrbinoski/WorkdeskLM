@@ -14,7 +14,6 @@ logger = logging.getLogger("reranker")
 @lru_cache(maxsize=1)
 def get_reranker() -> CrossEncoder:
     logger.info("loading reranker model=%s", settings.rerank_model)
-    # CPU is simplest and reliable inside Docker
     return CrossEncoder(settings.rerank_model, device="cpu")
 
 

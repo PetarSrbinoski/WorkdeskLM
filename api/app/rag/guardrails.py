@@ -26,7 +26,6 @@ def validate_or_abstain(answer: str) -> Tuple[bool, str]:
     if ans == ABSTAIN_TEXT:
         return True, ans
 
-    # If it contains no citation tags, abstain
     if not _CITATION_RE.search(ans):
         return True, ABSTAIN_TEXT
 

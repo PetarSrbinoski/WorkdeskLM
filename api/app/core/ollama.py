@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import logging
-from dataclasses import dataclass
 from typing import Any, Dict, List, Optional
 
 import httpx
@@ -11,7 +10,6 @@ from app.core.config import settings
 logger = logging.getLogger("ollama")
 
 
-@dataclass(frozen=True)
 class OllamaGenerateResult:
     model: str
     response: str
@@ -35,7 +33,9 @@ async def list_models(client: httpx.AsyncClient) -> List[str]:
 
 def _quality_candidates() -> List[str]:
     primary = settings.quality_model
-    fallbacks = [m.strip() for m in settings.quality_fallback_models.split(",") if m.strip()]
+    fallbacks = [
+        m.strip() for m in settings.quality_fallback_models.split(",") if m.strip()
+    ]
 
     seen = set()
     out: List[str] = []
@@ -71,8 +71,11 @@ async def pick_model(client: httpx.AsyncClient, mode: str) -> str:
 
 
 async def generate(
-        client: httpx.AsyncClient, model: str, prompt: str,
-        timeout_s: Optional[float] = None, ) -> OllamaGenerateResult:
+    client: httpx.AsyncClient,
+    model: str,
+    prompt: str,
+    timeout_s: Optional[float] = None,
+) -> OllamaGenerateResult:
     """
     Calls /api/generate with stream=false.
     """
@@ -88,4 +91,6 @@ async def generate(
     r = await client.post(url, json=payload, timeout=t)
     r.raise_for_status()
     data = r.json()
-    return OllamaGenerateResult(model=model, response=str(data.get("response", "")).strip())
+    return OllamaGenerateResult(
+        model=model, response=str(data.get("response", "")).strip()
+    )

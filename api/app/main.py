@@ -1,7 +1,6 @@
 import asyncio
 import logging
 import time
-from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional, Tuple
 from uuid import uuid4
 
@@ -12,6 +11,7 @@ from fastapi.responses import JSONResponse
 
 from app.core.config import settings
 from app.core.logging import setup_logging
+from app.core.time import utc_now_iso
 from app.core.embeddings import embed_texts, embedding_dim
 from app.core.qdrant import (
     ensure_collection,
@@ -20,7 +20,8 @@ from app.core.qdrant import (
     list_collections,
 )
 from app.core.qdrant import search as qdrant_search
-from app.core.ollama import generate as ollama_generate, pick_model
+from app.core.llm_router import generate as llm_generate, pick_model as llm_pick_model
+from app.core.nvidia_llm import list_models as nvidia_list_models
 
 from app.core.rerranker import rerank as rerank_hits  # Gen 3
 from app.db.sqlite import connect, fetch_all, fetch_one, init_db, tx
@@ -31,9 +32,9 @@ from app.schemas.retrieve import RetrieveRequest, RetrieveResponse, RetrievedChu
 from app.schemas.chat import ChatRequest, ChatResponse, Citation, LatencyBreakdown
 from app.rag.prompt import ContextChunk, build_prompt
 from app.rag.guardrails import should_abstain_from_retrieval, validate_or_abstain
+from app.rag.retrieval import run_retrieve_endpoint, run_chat_retrieval
 from app.observability.otel import setup_otel
 
-# Gen 3: sessions + studio
 from app.memory.store import (
     create_session,
     get_session,
@@ -82,8 +83,6 @@ app.add_middleware(
 DB = None
 
 
-def utc_now_iso() -> str:
-    return datetime.now(timezone.utc).isoformat()
 
 
 async def _check_http_json(
@@ -136,6 +135,22 @@ async def check_ollama(client: httpx.AsyncClient) -> Dict[str, Any]:
         "error": err,
     }
 
+async def check_nvidia(client: httpx.AsyncClient) -> Dict[str, Any]:
+    # OpenAI-compatible /models endpoint
+    data = await nvidia_list_models(client)
+    ok = bool(data.get("ok"))
+    return {
+        "ok": ok,
+        "url": data.get("url"),
+        "models": data.get("models", [])[:50],
+        "expected": {
+            "provider": "nvidia",
+            "fast_model": settings.nvidia_fast_model,
+            "quality_model": settings.nvidia_quality_model,
+        },
+        "error": data.get("error"),
+    }
+
 
 @app.on_event("startup")
 async def _startup() -> None:
@@ -154,14 +169,17 @@ async def _startup() -> None:
 async def health() -> JSONResponse:
     async with httpx.AsyncClient() as client:
         qdrant_task = check_qdrant(client)
-        ollama_task = check_ollama(client)
-        qdrant, ollama = await asyncio.gather(qdrant_task, ollama_task)
+        if settings.llm_provider.lower().strip() == "nvidia":
+            llm_task = check_nvidia(client)
+        else:
+            llm_task = check_ollama(client)
+        qdrant, llm = await asyncio.gather(qdrant_task, llm_task)
 
-    status = "ok" if qdrant["ok"] and ollama["ok"] else "degraded"
+    status = "ok" if qdrant["ok"] and llm["ok"] else "degraded"
     payload = {
         "status": status,
         "env": settings.app_env,
-        "services": {"qdrant": qdrant, "ollama": ollama},
+        "services": {"qdrant": qdrant, "llm": llm},
         "embedding": {
             "model": settings.embedding_model,
             "dim": embedding_dim(),
@@ -174,7 +192,7 @@ async def health() -> JSONResponse:
         },
     }
     code = 200 if status == "ok" else 503
-    logger.info("health status=%s qdrant_ok=%s ollama_ok=%s", status, qdrant["ok"], ollama["ok"])
+    logger.info("health status=%s qdrant_ok=%s llm_ok=%s provider=%s", status, qdrant["ok"], llm["ok"], settings.llm_provider)
     return JSONResponse(content=payload, status_code=code)
 
 
@@ -188,10 +206,6 @@ async def qdrant_collections() -> Dict[str, Any]:
     async with httpx.AsyncClient() as client:
         return await list_collections(client)
 
-
-# -----------------------------
-# Gen 3: Sessions / Memory
-# -----------------------------
 @app.post("/sessions", response_model=CreateSessionResponse)
 async def api_create_session(req: CreateSessionRequest) -> CreateSessionResponse:
     sid = create_session(DB, req.title)
@@ -234,8 +248,7 @@ TRANSCRIPT:
 SUMMARY:
 """
     async with httpx.AsyncClient() as client:
-        model = await pick_model(client, mode="fast")
-        gen = await ollama_generate(client, model=model, prompt=prompt)
+        gen = await llm_generate(client, mode="fast", prompt=prompt)
 
     summary = gen.response.strip()
     upsert_summary(DB, session_id, summary)
@@ -257,7 +270,7 @@ async def api_flashcards_debug(req: FlashcardsRequest) -> Dict[str, Any]:
 
     # generate raw model output
     context = ""
-    from app.studio.tools import _context_from_hits  # local helper inside tools.py
+    from app.studio.tools import _context_from_hits
     context = _context_from_hits(hits)
 
     prompt = f"""Create exactly {req.count} flashcards from the context below.
@@ -272,8 +285,8 @@ JSON:
 """
 
     async with httpx.AsyncClient() as client:
-        model = await pick_model(client, mode=req.mode)
-        gen = await ollama_generate(client, model=model, prompt=prompt)
+        model = await llm_pick_model(client, mode=req.mode)
+        gen = await llm_generate(client, model=model, prompt=prompt)
 
     return {
         "model_used": gen.model,
@@ -300,45 +313,19 @@ async def retrieve(req: RetrieveRequest) -> RetrieveResponse:
     if not question:
         raise HTTPException(status_code=400, detail="Question is empty")
 
-    qvec = embed_texts([question])[0]
-
-    # Two-stage retrieval
     enable_rerank = bool(getattr(settings, "enable_rerank", True))
     rerank_candidates = int(getattr(settings, "rerank_candidates", 20))
-    top_n = rerank_candidates if enable_rerank else req.top_k
 
-    async with httpx.AsyncClient() as client:
-        await ensure_collection(client, vector_size=embedding_dim())
-        raw_hits = await qdrant_search(
-            client,
-            query_vector=qvec,
-            top_k=top_n,
-            doc_id=req.doc_id,
-        )
+    mapped, _best, _timings = await run_retrieve_endpoint(
+        question=question,
+        top_k=req.top_k,
+        min_score=req.min_score,
+        doc_id=req.doc_id,
+        enable_rerank=enable_rerank,
+        rerank_candidates=rerank_candidates,
+    )
 
-    if enable_rerank and len(raw_hits) > 1:
-        raw_hits = rerank_hits(question, raw_hits)
-
-    raw_hits = raw_hits[: req.top_k]
-
-    results: List[RetrievedChunk] = []
-    for hit in raw_hits:
-        score = float(hit.get("score", 0.0))
-        if score < req.min_score:
-            continue
-
-        payload = hit.get("payload") or {}
-        results.append(
-            RetrievedChunk(
-                chunk_id=str(hit.get("id")),
-                score=score,
-                doc_id=str(payload.get("doc_id", "")),
-                doc_name=str(payload.get("doc_name", "")),
-                page_number=int(payload.get("page_number", 0) or 0),
-                chunk_index=int(payload.get("chunk_index", 0) or 0),
-                text=str(payload.get("text", "")),
-            )
-        )
+    results = [RetrievedChunk(**row) for row in mapped]
 
     return RetrieveResponse(
         question=req.question,
@@ -371,40 +358,24 @@ async def chat(req: ChatRequest) -> ChatResponse:
         session_summary = get_summary(DB, session_id)
         recent = list_messages(DB, session_id, limit=12)
         if recent:
-            recent_msgs_txt = "\n".join([f"{m['role'].upper()}: {m['content']}" for m in recent])[:4000]
-
-    # 1) Embed question
-    t_embed0 = time.perf_counter()
-    qvec = embed_texts([question])[0]
-    embed_ms = int((time.perf_counter() - t_embed0) * 1000)
-
-    # 2) Retrieve (two-stage)
-    t_q0 = time.perf_counter()
+            recent_msgs_txt = "\n".join([f"{m['role'].upper()}: {m['content']}" for m in recent])[:4000]    # Retrieve (embed -> qdrant -> optional rerank)
     enable_rerank = bool(getattr(settings, "enable_rerank", True))
     rerank_candidates = int(getattr(settings, "rerank_candidates", 20))
-    top_n = rerank_candidates if enable_rerank else req.top_k
 
-    async with httpx.AsyncClient() as client:
-        await ensure_collection(client, vector_size=embedding_dim())
-        raw_hits = await qdrant_search(client, query_vector=qvec, top_k=top_n, doc_id=req.doc_id)
-    qdrant_ms = int((time.perf_counter() - t_q0) * 1000)
+    citations, context_chunks, best_score, timings = await run_chat_retrieval(
+        question=question,
+        top_k=req.top_k,
+        min_score=req.min_score,
+        doc_id=req.doc_id,
+        enable_rerank=enable_rerank,
+        rerank_candidates=rerank_candidates,
+    )
 
-    if enable_rerank and len(raw_hits) > 1:
-        raw_hits = rerank_hits(question, raw_hits)
-
-    raw_hits = raw_hits[: req.top_k]
-
-    citations: List[Citation] = []
-    context_chunks: List[ContextChunk] = []
-
-    best_score = 0.0
-    for hit in raw_hits:
-        score = float(hit.get("score", 0.0))
-        if score > best_score:
-            best_score = score
+    embed_ms = timings.embed_ms
+    qdrant_ms = timings.qdrant_ms
 
     # Abstain early if retrieval is weak
-    if not raw_hits or should_abstain_from_retrieval(best_score, req.min_score):
+    if not context_chunks or should_abstain_from_retrieval(best_score, req.min_score):
         total_ms = int((time.perf_counter() - t0) * 1000)
 
         # Store messages if session_id provided
@@ -421,34 +392,6 @@ async def chat(req: ChatRequest) -> ChatResponse:
             latency=LatencyBreakdown(embed_ms=embed_ms, qdrant_ms=qdrant_ms, llm_ms=0, total_ms=total_ms),
         )
 
-    for hit in raw_hits:
-        score = float(hit.get("score", 0.0))
-        if score < req.min_score:
-            continue
-
-        payload = hit.get("payload") or {}
-        chunk_id = str(hit.get("id"))
-        doc_id = str(payload.get("doc_id", ""))
-        doc_name = str(payload.get("doc_name", ""))
-        page_number = int(payload.get("page_number", 0) or 0)
-        chunk_index = int(payload.get("chunk_index", 0) or 0)
-        text = str(payload.get("text", ""))
-
-        tag = f"[DOC={doc_name}|PAGE={page_number}|CHUNK={chunk_index}]"
-        context_chunks.append(ContextChunk(tag=tag, text=text))
-
-        citations.append(
-            Citation(
-                chunk_id=chunk_id,
-                score=score,
-                doc_id=doc_id,
-                doc_name=doc_name,
-                page_number=page_number,
-                chunk_index=chunk_index,
-                quote=text[:500],
-            )
-        )
-
     # 3) Build prompt (with optional session memory)
     base_prompt = build_prompt(question=question, chunks=context_chunks)
     memory_block = ""
@@ -457,35 +400,15 @@ async def chat(req: ChatRequest) -> ChatResponse:
     if recent_msgs_txt:
         memory_block += f"\n\nRECENT CONVERSATION:\n{recent_msgs_txt}\n"
 
-    prompt = base_prompt.replace("ANSWER:\n", f"{memory_block}\nANSWER:\n")
-
-    # 4) Pick model + generate with Ollama
+    prompt = base_prompt.replace("ANSWER:\n", f"{memory_block}\nANSWER:\n")    # 4) Generate (provider router: Ollama or NVIDIA)
     t_llm0 = time.perf_counter()
     async with httpx.AsyncClient() as client:
-        model = await pick_model(client, mode=req.mode)
         try:
-            gen = await ollama_generate(client, model=model, prompt=prompt)
+            gen = await llm_generate(client, mode=req.mode, prompt=prompt)
             answer_raw = gen.response
             model_used = gen.model
         except Exception as e:
-            if req.mode.lower().strip() == "quality":
-                fallback_list = [m.strip() for m in settings.quality_fallback_models.split(",") if m.strip()]
-                last_err = str(e)
-                answer_raw = ""
-                model_used = model
-                for fb in fallback_list:
-                    try:
-                        gen = await ollama_generate(client, model=fb, prompt=prompt)
-                        answer_raw = gen.response
-                        model_used = fb
-                        last_err = ""
-                        break
-                    except Exception as e2:
-                        last_err = str(e2)
-                if not answer_raw:
-                    raise HTTPException(status_code=503, detail=f"Ollama generate failed: {last_err}")
-            else:
-                raise HTTPException(status_code=503, detail=f"Ollama generate failed: {str(e)}")
+            raise HTTPException(status_code=503, detail=f"LLM generate failed: {str(e)}")
 
     llm_ms = int((time.perf_counter() - t_llm0) * 1000)
 

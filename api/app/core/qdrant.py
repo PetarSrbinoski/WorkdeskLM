@@ -33,12 +33,18 @@ async def ensure_collection(client: httpx.AsyncClient, vector_size: int) -> None
             "distance": "Cosine",
         }
     }
-    logger.info("creating qdrant collection name=%s dim=%s", settings.qdrant_collection, vector_size)
+    logger.info(
+        "creating qdrant collection name=%s dim=%s",
+        settings.qdrant_collection,
+        vector_size,
+    )
     cr = await client.put(url, json=payload, timeout=10.0)
     cr.raise_for_status()
 
 
-async def upsert_points(client: httpx.AsyncClient, points: List[Dict[str, Any]] ) -> None:
+async def upsert_points(
+    client: httpx.AsyncClient, points: List[Dict[str, Any]]
+) -> None:
     """
     Bulk upsert points.
     {id, vector, payload}
@@ -56,17 +62,11 @@ async def delete_points_by_doc_id(client: httpx.AsyncClient, doc_id: str) -> int
     Returns how many were deleted if Qdrant reports it (best-effort).
     """
     url = f"{_collection_url()}/points/delete?wait=true"
-    payload = {
-        "filter": {
-            "must": [
-                {"key": "doc_id", "match": {"value": doc_id}}
-            ]
-        }
-    }
+    payload = {"filter": {"must": [{"key": "doc_id", "match": {"value": doc_id}}]}}
     r = await client.post(url, json=payload, timeout=60.0)
     r.raise_for_status()
     data = r.json()
-    return int(data.get("result", {}).get("operation_id", 0))  # not actual count, indicates success
+    return int(data.get("result", {}).get("operation_id", 0))
 
 
 async def list_collections(client: httpx.AsyncClient) -> Dict[str, Any]:

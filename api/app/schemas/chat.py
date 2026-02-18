@@ -4,7 +4,7 @@ from pydantic import BaseModel, Field
 
 class ChatRequest(BaseModel):
     question: str = Field(min_length=1, max_length=4000)
-    mode: str = Field(default="fast")  # fast or quality
+    mode: str = Field(default="quality")  # fast or quality
     top_k: int = Field(default=6, ge=1, le=20)
     min_score: float = Field(default=0.25, ge=0.0, le=1.0)
     doc_id: Optional[str] = None
@@ -38,4 +38,3 @@ class ChatResponse(BaseModel):
     citations: List[Citation]
     latency: LatencyBreakdown
     session_id: Optional[str] = None
-
